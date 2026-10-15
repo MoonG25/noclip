@@ -2,7 +2,8 @@
 const KEY = 'noclip.progress';
 
 export function loadProgress() {
-  const base = { unlocked: 0, best: {}, clears: {} };
+  // seen: 그 테이프의 엔티티를 직접 겪었는지 (잡히거나 끝까지 녹화하면 기록된다)
+  const base = { unlocked: 0, best: {}, clears: {}, seen: {} };
   try {
     return { ...base, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
   } catch {
@@ -21,6 +22,14 @@ export function recordClear(p, index, seconds, total) {
   p.clears[index] = (p.clears[index] || 0) + 1;
   if (!p.best[index] || seconds < p.best[index]) p.best[index] = Math.round(seconds);
   p.unlocked = Math.max(p.unlocked, Math.min(index + 1, total - 1));
+  p.seen[index] = true;
+  save(p);
+}
+
+// 엔티티에게 잡혔을 때: 이제 그게 뭔지 안다
+export function markSeen(p, index) {
+  if (p.seen[index]) return;
+  p.seen[index] = true;
   save(p);
 }
 

@@ -75,7 +75,14 @@ export function createMenu(opts) {
         const best = p.best[t.i]
           ? `최고 기록 ${formatTime(p.best[t.i])} · 클리어 ${p.clears[t.i]}회`
           : '아직 끝까지 녹화하지 못했다';
-        hover = `<p>${tp.desc}</p><p class="threat">⚠ ${tp.threat}</p><p class="best">${best}</p>`;
+        // 직접 겪기 전에는 엔티티 정보를 검게 지운다. 글자 수만 막대 길이로 남긴다
+        const threat = p.seen[t.i]
+          ? `<p class="threat">⚠ ${tp.threat}</p>`
+          : `<p class="threat redacted" title="기록 손상">⚠ ${tp.threat
+              .split(/\s+/)
+              .map((w) => `<span class="bar" style="width:${(w.length * 0.95).toFixed(2)}em"></span>`)
+              .join('')}</p>`;
+        hover = `<p>${tp.desc}</p>${threat}<p class="best">${best}</p>`;
       }
       btn.innerHTML =
         `<div class="sleeve"><div class="sleeve-top"><span>NOCLIP · T-120</span><span>TAPE ${t.i}</span></div>` +
@@ -228,15 +235,28 @@ export function createMenu(opts) {
     return current;
   }
 
+  function bindTitle(el) {
+    el.addEventListener('mouseenter', () => {
+      if (open && !busy && activeList() === 'title') setFocus('title', lists.title().indexOf(el));
+    });
+    el.addEventListener('click', (e) => {
+      if (e.detail === 0 || !open || busy || activeList() !== 'title') return;
+      setFocus('title', lists.title().indexOf(el), true);
+      activate('title');
+    });
+  }
+
+  // 순번은 이벤트가 일어난 순간에 다시 센다. '이어서 녹화'처럼 나중에 나타나는 항목이 있어
+  // 연결할 때의 순번을 고정해 두면 한 칸씩 밀린다
   function bindPointer(list) {
-    lists[list]().forEach((el, i) => {
+    lists[list]().forEach((el) => {
       el.addEventListener('mouseenter', () => {
-        if (open && !busy && activeList() === list) setFocus(list, i);
+        if (open && !busy && activeList() === list) setFocus(list, lists[list]().indexOf(el));
       });
       el.addEventListener('click', (e) => {
         if (e.detail === 0) return; // 키보드가 만든 클릭은 keydown에서 이미 처리했다
         if (!open || busy || activeList() !== list) return;
-        setFocus(list, i, true);
+        setFocus(list, lists[list]().indexOf(el), true);
         if (list === 'tabs') opts.sound('move');
         else activate(list);
       });
@@ -276,7 +296,7 @@ export function createMenu(opts) {
     e.preventDefault();
   });
 
-  bindPointer('title');
+  for (const el of document.querySelectorAll('[data-list="title"] > .mi')) bindTitle(el);
   bindPointer('tabs');
   bindPointer('yn');
 

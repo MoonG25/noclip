@@ -11,7 +11,7 @@ import { HUD } from './hud.js';
 import { makeTextures } from './textures.js';
 import { randomSeed } from './rng.js';
 import { createMenu } from './menu.js';
-import { loadProgress, recordClear } from './progress.js';
+import { loadProgress, recordClear, markSeen } from './progress.js';
 
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test'); // 자동 테스트용: 포인터 락 없이 동작
@@ -325,6 +325,7 @@ function exitLevel() {
 }
 
 function caught() {
+  markSeen(progress, game.levelIndex);
   setState('caught');
   game.caughtT = 0;
   game.deaths++;

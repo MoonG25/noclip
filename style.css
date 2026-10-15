@@ -1180,3 +1180,13 @@ body {
     bottom: 11vh;
   }
 }
+
+/* 직접 겪기 전에는 엔티티 정보가 검열된다 (The Classrooms 도감의 [Redacted]처럼) */
+.threat.redacted .bar {
+  display: inline-block;
+  height: 0.9em;
+  margin-right: 0.35em;
+  vertical-align: -0.1em;
+  background: rgba(255, 143, 134, 0.7);
+  clip-path: polygon(0 8%, 4% 0, 96% 6%, 100% 0, 99% 92%, 95% 100%, 3% 94%, 0 100%);
+}

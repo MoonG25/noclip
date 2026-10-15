@@ -67,6 +67,7 @@ Steam 패치노트 이미지와 팬 위키를 보고 The Classrooms 메뉴의 �
 
 - 테이프를 넣으면 VCR 블루스크린과 `PLAY ▶`, 트래킹 노이즈가 지나간 뒤 녹화가 시작된다. 덜컥 들어가는 소리와 모터 소리도 합성했다.
 - 진행 상황(해금된 테이프, 테이프별 최고 기록·클리어 횟수)은 브라우저 `localStorage`에 저장된다.
+- 테이프 카드의 엔티티 정보는 처음엔 검열 막대로 가려져 있다(도감의 `[Redacted]` 차용). 그 테이프에서 한 번 잡히거나 끝까지 녹화해야 정체가 기록된다. 표지 사진에도 엔티티를 넣지 않았다.
 - 레퍼런스: [Steam 패치노트](https://steamcommunity.com/app/2099110/allnews/), [The Classrooms Unofficial Wiki · Tutorial](https://the-classrooms-unofficial.fandom.com/wiki/Tutorial)
 
 ## 실행 방법
