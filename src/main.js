@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { LEVELS } from './themes.js';
 import { Level, WALL } from './level.js';
 import { Player } from './player.js';
-import { Entity } from './entity.js';
+import { Hound } from './entities/hound.js';
+import { Doll } from './entities/doll.js';
 import { LightRig } from './lights.js';
 import { AudioEngine } from './audio.js';
 import { VHS } from './vhs.js';
@@ -25,8 +26,10 @@ const tex = makeTextures(renderer);
 const vhs = new VHS(renderer);
 const lights = new LightRig(scene);
 const player = new Player(camera);
-const entity = new Entity(tex);
-scene.add(entity.mesh);
+// 레벨마다 다른 엔티티. 테마의 entity.kind 로 고른다
+const entities = { hound: new Hound(tex), doll: new Doll(tex) };
+for (const e of Object.values(entities)) scene.add(e.mesh);
+let entity = entities.hound;
 const hud = new HUD();
 let audio = null;
 
@@ -94,8 +97,14 @@ function loadLevel(index, seed) {
   }
   player.reset(c.x, c.z, yaw);
   player.flashOn = false;
+  for (const e of Object.values(entities)) e.hide();
+  entity = entities[theme.entity.kind];
   entity.reset(level, theme);
-  if (audio) audio.setTheme(theme);
+  if (audio) {
+    audio.setTheme(theme);
+    audio.setEntityKind(theme.entity.kind);
+    audio.attachEntity(entity.audioAnchor);
+  }
   updateObjective();
   if (TEST) window.__noclip.level = level;
 }
@@ -135,7 +144,8 @@ function unlockPointer() {
 function ensureAudio() {
   if (!audio) {
     audio = new AudioEngine(camera);
-    audio.attachEntity(entity.head);
+    audio.setEntityKind(entity.cfg.kind);
+    audio.attachEntity(entity.audioAnchor);
     if (game.level) audio.setTheme(game.level.theme);
   }
   audio.resume();
@@ -332,18 +342,19 @@ function update(dt) {
 
   if (s === 'caught') updateCaught(dt);
   else {
-    const ev = entity.update(dt, lv, player, game.time, camera);
+    const ev = entity.update(dt, { level: lv, player, time: game.time, camera, glitch: game.glitch });
     for (const e of ev) {
       if (e === 'awake') {
         lights.flash(1.4);
         audio.stinger();
         game.glitch = 0.7;
-        hud.message('…어딘가에서 오르골 소리가 들리기 시작했다', 4);
+        hud.message(entity.awakeMessage, 4);
       } else if (e === 'chase') {
         audio.stinger();
-        audio.giggle(1);
+        audio.entityAlert();
         game.glitch = 0.9;
-      } else if (e === 'step') audio.entityStep(entity.chasing);
+      } else if (e === 'listen') audio.entityListen();
+      else if (e === 'step') audio.entityStep(entity.chasing);
       else if (e === 'caught' && s !== 'transition') caught();
     }
   }
@@ -426,7 +437,11 @@ function updateCaught(dt) {
   game.caughtT += dt;
   // 처음엔 얼굴이 또렷하게 보이고, 마지막에 테이프가 완전히 찢어진다
   game.glitch = game.caughtT < 0.9 ? 0.3 : 1;
-  // 고개가 강제로 그것을 향한다
+  // 그것이 덮쳐 오는 자세를 잡고, 고개가 강제로 그것을 향한다
+  entity.yaw = Math.atan2(player.pos.x - entity.pos.x, player.pos.z - entity.pos.z);
+  entity.mesh.rotation.y = entity.yaw;
+  entity.jumpscarePose();
+  entity.mesh.updateMatrixWorld(true);
   entity.head.getWorldPosition(_head);
   const dx = _head.x - camera.position.x;
   const dy = _head.y - camera.position.y;
@@ -441,12 +456,11 @@ function updateCaught(dt) {
   player.pitch += (pitch - player.pitch) * k;
   // 얼굴이 화면을 채울 때까지 다가온다
   const toward = Math.hypot(player.pos.x - entity.pos.x, player.pos.z - entity.pos.z);
-  if (toward > 0.85) {
+  if (toward > entity.cfg.reach) {
     entity.pos.x += ((player.pos.x - entity.pos.x) / toward) * dt * 3;
     entity.pos.z += ((player.pos.z - entity.pos.z) / toward) * dt * 3;
   }
   entity.syncMesh();
-  entity.setScream(true);
   entity.head.lookAt(camera.position);
   if (game.caughtT > 1.3) {
     setState('dead');
@@ -566,7 +580,22 @@ $('opt-mic').addEventListener('change', async (e) => {
 });
 
 // ---------- 부팅 ----------
-if (TEST) window.__noclip = { game, player, entity, lights, startGame, interact, loadLevel, LEVELS, camera };
+if (TEST) {
+  window.__noclip = {
+    game,
+    player,
+    entities,
+    get entity() {
+      return entity;
+    },
+    lights,
+    startGame,
+    interact,
+    loadLevel,
+    LEVELS,
+    camera,
+  };
+}
 resize();
 loadLevel(0, 1996);
 showScreen('screen-title');

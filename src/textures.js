@@ -637,6 +637,41 @@ function hair() {
   return c;
 }
 
+// 하운드 피부: 창백하고 멍든 살갗, 비치는 핏줄과 갈비뼈
+function houndSkin() {
+  const S = 256;
+  const [c, x] = canvas(S, S);
+  x.fillStyle = '#b8a294';
+  x.fillRect(0, 0, S, S);
+  stains(x, S, S, 8, '120,90,95', 50, 0.18);
+  stains(x, S, S, 5, '90,70,60', 30, 0.2);
+  for (let i = 0; i < 9; i++) {
+    const y = 20 + i * 26;
+    const g = x.createLinearGradient(0, y - 6, 0, y + 6);
+    g.addColorStop(0, 'rgba(60,40,40,0)');
+    g.addColorStop(0.5, 'rgba(60,40,40,0.25)');
+    g.addColorStop(1, 'rgba(60,40,40,0)');
+    x.fillStyle = g;
+    x.fillRect(0, y - 6, S, 12);
+  }
+  x.lineWidth = 1.2;
+  for (let i = 0; i < 26; i++) {
+    x.strokeStyle = `rgba(${rng.next() > 0.5 ? '90,60,110' : '110,40,50'},0.45)`;
+    let px = rng.next() * S;
+    let py = rng.next() * S;
+    x.beginPath();
+    x.moveTo(px, py);
+    for (let k = 0; k < 6; k++) {
+      px += (rng.next() - 0.5) * 30;
+      py += (rng.next() - 0.5) * 30;
+      x.lineTo(px, py);
+    }
+    x.stroke();
+  }
+  grain(x, S, S, 22);
+  return c;
+}
+
 function glow() {
   const [c, x] = canvas(128, 128);
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -693,6 +728,7 @@ export function makeTextures(renderer) {
     dollScream: toTex(dollFace(true), a, { repeat: false }),
     dress: toTex(dress(), a),
     hair: toTex(hair(), a),
+    houndSkin: toTex(houndSkin(), a),
     glow: toTex(glow(), a, { repeat: false }),
     paper: toTex(paper(), a, { repeat: false }),
   };

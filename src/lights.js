@@ -42,6 +42,8 @@ export class LightRig {
     const fx = lv.fixtures;
     const ex = entity.active ? entity.pos.x : 1e9;
     const ez = entity.active ? entity.pos.z : 1e9;
+    // 엔티티가 지나가면 근처 형광등이 버티지 못한다 (세기는 엔티티마다 다르다)
+    const fl = (entity.cfg && entity.cfg.flicker) || { radius: 7, chance: 0.85 };
     this.blackout = Math.max(0, this.blackout - dt);
     const out = this.blackout > 0;
     const slot = Math.floor(time * 14);
@@ -55,8 +57,8 @@ export class LightRig {
         if (w > 0.55) b = hash1(slot + f.phase) > 0.45 ? 1 : 0.08;
       }
       const de = Math.hypot(f.x - ex, f.z - ez);
-      if (de < 7 && b > 0) {
-        const p = (1 - de / 7) * 0.85;
+      if (de < fl.radius && b > 0) {
+        const p = (1 - de / fl.radius) * fl.chance;
         if (hash1(slot * 1.7 + f.phase) < p) b = 0.05;
       }
       if (out) b = 0;

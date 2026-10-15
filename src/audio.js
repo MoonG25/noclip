@@ -149,29 +149,112 @@ export class AudioEngine {
     this.drone.gain.setTargetAtTime(0.09 * theme.audio.drone, this.ctx.currentTime, 1.5);
   }
 
-  // 인형에 붙는 3D 사운드: 태엽이 풀려가는 오르골, 킥킥거림, 도자기 발소리
+  // 엔티티 3D 사운드. 버스 하나를 현재 레벨의 엔티티에 붙이고, 종류별 소리를 흘려보낸다
   attachEntity(obj) {
-    const ctx = this.ctx;
-    const pa = new THREE.PositionalAudio(this.listener);
-    pa.setRefDistance(2.5);
-    pa.setRolloffFactor(1.3);
-    pa.setDistanceModel('inverse');
-    this.entityBus = ctx.createGain();
-    this.musicBox = ctx.createGain();
-    this.musicBox.gain.value = 0;
-    this.musicBox.connect(this.entityBus);
-    pa.setNodeSource(this.entityBus);
-    obj.add(pa);
-    this.entityAudio = pa;
-    this.mb = { on: false, next: 0, i: 0, wind: 1 };
-    this.giggleT = 30;
+    if (!this.entityAudio) {
+      const ctx = this.ctx;
+      const pa = new THREE.PositionalAudio(this.listener);
+      pa.setRefDistance(2.5);
+      pa.setRolloffFactor(1.3);
+      pa.setDistanceModel('inverse');
+      this.entityBus = ctx.createGain();
+      pa.setNodeSource(this.entityBus);
+      this.entityAudio = pa;
+
+      // 인형: 오르골
+      this.musicBox = ctx.createGain();
+      this.musicBox.gain.value = 0;
+      this.musicBox.connect(this.entityBus);
+      this.mb = { on: false, next: 0, i: 0, wind: 1 };
+      this.giggleT = 30;
+
+      // 하운드: 젖은 쇳소리 섞인 숨
+      const mod = ctx.createGain();
+      mod.gain.value = 0.5;
+      this.houndLfo = this._osc('sine', 0.6);
+      const lg = ctx.createGain();
+      lg.gain.value = 0.5;
+      this.houndLfo.connect(lg).connect(mod.gain);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 700;
+      bp.Q.value = 1.2;
+      this._loop(this.white).connect(bp).connect(mod);
+      const glp = ctx.createBiquadFilter();
+      glp.type = 'lowpass';
+      glp.frequency.value = 220;
+      this._loop(this.brown).connect(glp).connect(mod);
+      this.houndBreath = ctx.createGain();
+      this.houndBreath.gain.value = 0;
+      mod.connect(this.houndBreath).connect(this.entityBus);
+    }
+    obj.add(this.entityAudio);
   }
 
-  // 배회·수색 중에는 오르골이 흐르고, 추격이 시작되면 뚝 끊긴다
+  setEntityKind(kind) {
+    this.kind = kind;
+    if (!this.entityAudio) return;
+    const t = this.ctx.currentTime;
+    this.mbWanted = false;
+    this.mb.on = false;
+    this.musicBox.gain.cancelScheduledValues(t);
+    this.musicBox.gain.setValueAtTime(0, t);
+    this.houndBreath.gain.setValueAtTime(0, t);
+  }
+
+  // 인형: 배회·수색 중에는 오르골이 흐르고, 추격이 시작되면 뚝 끊긴다
+  // 하운드: 늘 숨소리가 나고, 사냥할 때는 거칠고 빨라진다
   setEntityMood(active, chasing) {
-    this.mbWanted = active && !chasing;
     this.entityActive = active;
     this.entityChasing = chasing;
+    this.mbWanted = this.kind === 'doll' && active && !chasing;
+    if (!this.houndBreath) return;
+    const t = this.ctx.currentTime;
+    const hound = this.kind === 'hound' && active;
+    this.houndBreath.gain.setTargetAtTime(hound ? (chasing ? 0.9 : 0.45) : 0, t, 0.3);
+    this.houndLfo.frequency.setTargetAtTime(chasing ? 2.4 : 0.6, t, 0.4);
+  }
+
+  // 추격 시작 신호: 인형은 킥킥거리고, 하운드는 비명을 지른다
+  entityAlert() {
+    if (this.kind === 'hound') this._houndScreech();
+    else this.giggle(1);
+  }
+
+  // 하운드가 귀를 기울일 때 내는 딸깍거리는 소리
+  entityListen() {
+    if (!this.entityBus || this.kind !== 'hound') return;
+    const t0 = this.ctx.currentTime;
+    const n = 4 + Math.floor(Math.random() * 5);
+    let t = t0;
+    for (let i = 0; i < n; i++) {
+      this._noiseHit(this.entityBus, t, { freq: 2600 + Math.random() * 1200, type: 'bandpass', q: 8, gain: 0.7, decay: 0.012 });
+      t += 0.05 + Math.random() * 0.07;
+    }
+  }
+
+  _houndScreech() {
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const g = ctx.createGain();
+    this._env(g, t, 0.5, 0.03, 1.0);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1700;
+    bp.Q.value = 1.5;
+    const d = distortion(ctx, 30);
+    d.connect(bp).connect(g).connect(this.entityBus);
+    for (const m of [1, 1.47, 0.52]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(700 * m, t);
+      o.frequency.exponentialRampToValueAtTime(1400 * m, t + 0.25);
+      o.frequency.exponentialRampToValueAtTime(520 * m, t + 1.0);
+      o.connect(d);
+      o.start(t);
+      o.stop(t + 1.1);
+    }
+    this._noiseHit(this.entityBus, t, { freq: 2500, type: 'bandpass', q: 0.8, gain: 0.4, decay: 0.8 });
   }
 
   _musicBox() {
@@ -309,10 +392,17 @@ export class AudioEngine {
     }
   }
 
-  // 도자기 발이 바닥에 부딪히는 딱딱한 소리, 가끔 관절이 삐걱거린다
   entityStep(chasing) {
     if (!this.entityBus) return;
     const t = this.ctx.currentTime;
+    if (this.kind === 'hound') {
+      // 맨살이 카펫을 짚는 둔탁한 소리와 손톱 긁는 소리
+      const v = chasing ? 0.9 : 0.4;
+      this._noiseHit(this.entityBus, t, { freq: 260, gain: v, decay: chasing ? 0.09 : 0.12 });
+      this._noiseHit(this.entityBus, t + 0.03, { freq: 1500, type: 'bandpass', q: 2, gain: v * 0.25, decay: 0.03 });
+      return;
+    }
+    // 도자기 발이 바닥에 부딪히는 딱딱한 소리, 가끔 관절이 삐걱거린다
     const v = chasing ? 0.8 : 0.45;
     this._noiseHit(this.entityBus, t, { freq: 2600 + Math.random() * 600, type: 'bandpass', q: 3, gain: v, decay: 0.035 });
     this._tone(this.entityBus, t, { type: 'triangle', f0: 1100 + Math.random() * 200, f1: 700, gain: v * 0.35, decay: 0.05 });
@@ -451,7 +541,7 @@ export class AudioEngine {
 
   ambient(dt) {
     this._musicBox();
-    if (this.entityActive && !this.entityChasing) {
+    if (this.kind === 'doll' && this.entityActive && !this.entityChasing) {
       this.giggleT -= dt;
       if (this.giggleT <= 0) {
         this.giggleT = 25 + Math.random() * 30;
