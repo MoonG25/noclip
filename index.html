@@ -23,7 +23,7 @@
     <meta name="twitter:image" content="https://noclip-swart.vercel.app/og.jpg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Oswald:wght@300;400;500&family=Nanum+Pen+Script&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
     <script type="importmap">
       {
@@ -76,36 +76,86 @@
       <div id="tc-hint"></div>
     </div>
 
-    <section id="screen-title" class="screen">
-      <div class="panel">
-        <h1 class="glitch" data-text="NOCLIP">NOCLIP</h1>
-        <p class="sub">탐사 기록 테이프 #0 · 1996. 10. 15</p>
-        <p class="story">
-          1996년 10월 15일 새벽, 폐교된 학교 지하를 조사하던 촬영팀의 마지막 테이프.<br />
-          보일러실 벽 너머에는 끝없이 이어지는 노란 방이 있었다.
-        </p>
-        <div class="controls">
-          <span><b>WASD</b> 이동</span>
-          <span><b>마우스</b> 시점</span>
-          <span><b>Shift</b> 달리기</span>
-          <span><b>C</b> 웅크리기</span>
-          <span><b>F</b> 손전등</span>
-          <span><b>E</b> 줍기 · 상호작용</span>
-          <span><b>Esc</b> 일시정지</span>
-        </div>
-        <div class="options">
-          <label><input type="checkbox" id="opt-mic" /> 마이크 사용 — 실제로 소리를 내면 그것이 듣는다</label>
-        </div>
-        <div class="settings">
-          <label><span>마우스 감도</span><input type="range" data-setting="sens" min="0.4" max="2.5" step="0.1" /></label>
-          <label><span>음량</span><input type="range" data-setting="volume" min="0" max="1" step="0.05" /></label>
-          <label><span>밝기</span><input type="range" data-setting="bright" min="0.6" max="1.8" step="0.05" /></label>
-        </div>
+    <!-- 메뉴 화면 공통: 캠코더 화면 표시(OSD) -->
+    <div id="osd" class="osd hidden" aria-hidden="true">
+      <div class="osd-tl" id="osd-mode">PLAY ▶</div>
+      <div class="osd-tr"><div id="osd-time">AM 3:14:00</div><div>OCT. 15 1996</div></div>
+      <div class="osd-bl">SP&nbsp;&nbsp;<span id="osd-counter">0:00:00</span></div>
+      <div class="osd-br">NOCLIP v0.4</div>
+    </div>
+
+    <section id="screen-title" class="screen menu">
+      <div class="menu-col">
+        <h1 class="logo glitch" data-text="NOCLIP">NOCLIP</h1>
+        <p class="menu-sub">탐사 기록 테이프 · 1996. 10. 15 · AM 3:14</p>
+        <nav class="menu-list" data-list="title">
+          <button class="mi hidden" data-action="continue" id="mi-continue"><span class="ko">이어서 녹화</span><em id="mi-continue-tag">CONTINUE</em></button>
+          <button class="mi" data-action="new" id="btn-start"><span class="ko">새 녹화</span><em>NEW TAPE</em></button>
+          <button class="mi" data-action="tapes"><span class="ko">테이프 선택</span><em>VHS TAPES</em></button>
+          <button class="mi" data-action="settings"><span class="ko">설정</span><em>SETTINGS</em></button>
+        </nav>
         <p id="mobile-warn" class="mobile-warn hidden">이 게임은 키보드와 마우스가 필요합니다. 데스크톱 브라우저에서 플레이해 주세요.</p>
-        <button id="btn-start" class="btn">● 녹화 시작</button>
-        <p class="warn">헤드폰 권장 · 화면 깜빡임과 갑작스러운 큰 소리가 있습니다</p>
       </div>
+      <p class="menu-warn">헤드폰 권장 · 화면 깜빡임과 갑작스러운 큰 소리가 있습니다</p>
+      <div class="keyhint"><span>[↑↓] 선택</span><span>[ENTER] 확인</span></div>
     </section>
+
+    <section id="screen-tapes" class="screen menu hidden">
+      <header class="panel-head">
+        <h2>VHS TAPES</h2>
+        <p>재생할 테이프를 고르세요</p>
+      </header>
+      <div class="tapes-row" id="tapes-row" data-list="tapes"></div>
+      <div class="keyhint"><span>[←→] 선택</span><span>[ENTER] 재생</span><span>[ESC] 뒤로</span></div>
+    </section>
+
+    <section id="screen-settings" class="screen menu hidden">
+      <div class="settings-panel">
+        <header class="panel-head left"><h2>SETTINGS</h2></header>
+        <div class="tabs" data-list="tabs">
+          <button class="tab" data-tab="game">게임</button>
+          <button class="tab" data-tab="audio">오디오</button>
+          <button class="tab" data-tab="display">화면</button>
+          <button class="tab" data-tab="controls">조작</button>
+        </div>
+        <div class="tab-body" data-body="game">
+          <label class="row"><span>마우스 감도</span><input type="range" data-setting="sens" min="0.4" max="2.5" step="0.1" /></label>
+          <label class="row"><span>마이크 사용<small>실제로 소리를 내면 그것이 듣는다</small></span><input type="checkbox" id="opt-mic" class="toggle" /></label>
+        </div>
+        <div class="tab-body hidden" data-body="audio">
+          <label class="row"><span>음량</span><input type="range" data-setting="volume" min="0" max="1" step="0.05" /></label>
+        </div>
+        <div class="tab-body hidden" data-body="display">
+          <label class="row"><span>밝기<small>너무 어두우면 올리세요</small></span><input type="range" data-setting="bright" min="0.6" max="1.8" step="0.05" /></label>
+        </div>
+        <div class="tab-body hidden" data-body="controls">
+          <div class="keys">
+            <span>이동</span><b>W A S D</b>
+            <span>시점</span><b>마우스</b>
+            <span>달리기</span><b>SHIFT</b>
+            <span>웅크리기</span><b>C</b>
+            <span>손전등</span><b>F</b>
+            <span>줍기 · 상호작용</span><b>E</b>
+            <span>일시정지</span><b>ESC</b>
+          </div>
+        </div>
+      </div>
+      <div class="keyhint"><span>[Q] 이전 탭</span><span>[E] 다음 탭</span><span>[ESC] 닫기</span></div>
+    </section>
+
+    <div id="dlg-insert" class="dialog hidden">
+      <div class="band">
+        <h3>INSERT TAPE?</h3>
+        <p class="dlg-tape" id="dlg-tape">TAPE 0 · 로비</p>
+        <div class="yn" data-list="yn">
+          <button class="mi-yn" data-yn="no">NO</button>
+          <button class="mi-yn" data-yn="yes">YES</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 테이프를 넣은 직후: VCR 블루스크린과 PLAY 표시 -->
+    <div id="insert-fx" class="insert-fx hidden"><div class="fx-play">PLAY ▶</div><div class="fx-track"></div></div>
 
     <section id="screen-pause" class="screen hidden">
       <div class="panel">

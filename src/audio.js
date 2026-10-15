@@ -496,6 +496,48 @@ export class AudioEngine {
     this._tone(this.master, t + 0.5, { f0: 1175, gain: 0.08, decay: 0.6 });
   }
 
+  // ---------- 메뉴 ----------
+  uiMove() {
+    const t = this.ctx.currentTime;
+    this._noiseHit(this.master, t, { freq: 3200, type: 'bandpass', q: 4, gain: 0.08, decay: 0.015 });
+  }
+
+  uiSelect() {
+    const t = this.ctx.currentTime;
+    this._noiseHit(this.master, t, { freq: 1800, type: 'bandpass', q: 2, gain: 0.18, decay: 0.03 });
+    this._tone(this.master, t, { type: 'square', f0: 220, f1: 110, gain: 0.05, decay: 0.06 });
+  }
+
+  uiBack() {
+    const t = this.ctx.currentTime;
+    this._noiseHit(this.master, t, { freq: 900, type: 'bandpass', q: 2, gain: 0.12, decay: 0.03 });
+  }
+
+  // VCR에 테이프를 밀어 넣는 소리: 덜컥 → 헤드가 감기며 모터가 돈다 → 재생
+  tapeInsert() {
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    this._tone(this.master, t, { f0: 140, f1: 60, gain: 0.35, decay: 0.12 });
+    this._noiseHit(this.master, t, { freq: 1200, type: 'bandpass', q: 1.5, gain: 0.3, decay: 0.08 });
+    this._noiseHit(this.master, t + 0.22, { freq: 2400, type: 'bandpass', q: 3, gain: 0.2, decay: 0.04 });
+    // 모터 웅웅거림
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(40, t + 0.3);
+    o.frequency.linearRampToValueAtTime(90, t + 0.9);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 320;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t + 0.3);
+    g.gain.linearRampToValueAtTime(0.12, t + 0.45);
+    g.gain.linearRampToValueAtTime(0.0001, t + 1.1);
+    o.connect(lp).connect(g).connect(this.master);
+    o.start(t + 0.3);
+    o.stop(t + 1.15);
+    this._noiseHit(this.master, t + 0.95, { freq: 2600, type: 'bandpass', q: 3, gain: 0.18, decay: 0.03 });
+  }
+
   denied() {
     const t = this.ctx.currentTime;
     this._tone(this.master, t, { type: 'square', f0: 180, gain: 0.07, decay: 0.15 });

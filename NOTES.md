@@ -4,7 +4,7 @@
 
 - **플레이**: https://noclip-swart.vercel.app
 - **시작일**: 2026-10-15
-- **상태**: ✅ 플레이 가능 (v0.3 · 다듬기)
+- **상태**: ✅ 플레이 가능 (v0.4 · 메뉴 개편)
 - **레퍼런스**: [The Classrooms](https://store.steampowered.com/app/2099110/The_Classrooms/) (Steam, 절차 생성 · 파운드 푸티지 · 리미널 스페이스 호러)
 - **사용 라이브러리**: [three.js](https://github.com/mrdoob/three.js) `r160` (CDN, MIT)
 - **저장소**: [MoonG25/noclip](https://github.com/MoonG25/noclip) · `main`에 푸시하면 Vercel에 자동 배포된다
@@ -52,6 +52,23 @@ The Classrooms는 1996년 VHS 테이프라는 설정 아래, 매번 다르게 �
 - **정신력**: 어둠 속이나 엔티티 근처에서 깎인다. 바닥나면 엔티티가 당신의 위치를 감지한다. 아몬드 워터를 마시면 회복된다.
 - **쪽지**: 벽에 붙은 이전 탐사자의 기록. 엔티티를 피하는 힌트가 섞여 있다. 레벨 0은 4장, 레벨 1은 5장.
 
+### 메뉴 UI (v0.4) · The Classrooms 분석
+
+Steam 패치노트 이미지와 팬 위키를 보고 The Classrooms 메뉴의 문법을 정리했다.
+
+| The Classrooms | NOCLIP 적용 |
+|---|---|
+| 모든 화면에 캠코더 OSD (`PLAY ▶`, `PAUSE ❚❚`, 날짜·시각, `SP 0:00:00`) | 메뉴마다 OSD 상태가 바뀐다. 시작 `PLAY ▶`, 테이프 선택 `STOP ■`, 설정 `SETUP` |
+| 선택한 항목은 흰 붓질 하이라이트 위에 검은 글씨 | 메뉴·탭·YES/NO 모두 같은 붓질 하이라이트 |
+| 찢어진 가장자리의 검은 띠 위에 확인창 (`YOU DIED / TRY AGAIN? NO YES`) | 테이프를 고르면 `INSERT TAPE?` 띠가 뜨고 뒤 화면은 글리치로 번진다 |
+| Levels 메뉴: 레벨 = 테이프, 마우스를 올리면 제목 아래 설명, 고르면 `INSERT TAPE?` | VHS 슬리브 카드(표지·손글씨 라벨), 고르면 들어 올려지며 설명·엔티티 경고·최고 기록이 보인다. 잠긴 테이프는 `NO SIGNAL` |
+| 넓게 벌린 대문자 탭, 하단 키 안내 `[Q] PREVIOUS TAB [E] NEXT TAB [ESC] CLOSE` | 설정 탭(게임·오디오·화면·조작)과 같은 형식의 키 안내 |
+| 일시정지 메뉴의 VHS TAPES 목록 | 테이프 슬리브의 `NOCLIP · T-120` 표기와 라벨 스티커 |
+
+- 테이프를 넣으면 VCR 블루스크린과 `PLAY ▶`, 트래킹 노이즈가 지나간 뒤 녹화가 시작된다. 덜컥 들어가는 소리와 모터 소리도 합성했다.
+- 진행 상황(해금된 테이프, 테이프별 최고 기록·클리어 횟수)은 브라우저 `localStorage`에 저장된다.
+- 레퍼런스: [Steam 패치노트](https://steamcommunity.com/app/2099110/allnews/), [The Classrooms Unofficial Wiki · Tutorial](https://the-classrooms-unofficial.fandom.com/wiki/Tutorial)
+
 ## 실행 방법
 
 ES 모듈을 쓰기 때문에 `file://`로는 열리지 않는다. 로컬 서버가 필요하다.
@@ -76,6 +93,8 @@ index.html        HUD, 타이틀, 일시정지, 사망, 엔딩 화면
 style.css
 src/
   main.js         게임 루프, 상태 머신, 상호작용
+  menu.js         시작 화면·테이프 선택·설정·INSERT TAPE? 확인창 (키보드·마우스 탐색)
+  progress.js     테이프 해금과 기록 저장
   themes.js       레벨 설정 (새 레벨은 여기에 객체 하나 추가)
   level.js        맵 생성, 지오메트리, 충돌, 경로탐색(BFS), 시야 판정
   entities/

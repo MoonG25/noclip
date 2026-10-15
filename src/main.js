@@ -10,6 +10,8 @@ import { VHS } from './vhs.js';
 import { HUD } from './hud.js';
 import { makeTextures } from './textures.js';
 import { randomSeed } from './rng.js';
+import { createMenu } from './menu.js';
+import { loadProgress, recordClear } from './progress.js';
 
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test'); // 자동 테스트용: 포인터 락 없이 동작
@@ -49,6 +51,8 @@ const game = {
   sanityT: 0,
   micT: 0,
   noise: 0,
+  levelT: 0,
+  menuGlitch: 0,
   target: null,
 };
 
@@ -162,21 +166,28 @@ function ensureAudio() {
   audio.resume();
 }
 
-function startGame() {
+const progress = loadProgress();
+
+function startGame(index = defaultTape()) {
   ensureAudio();
+  menu.hide();
   game.elapsed = 0;
   game.deaths = 0;
   game.notes.clear();
   player.battery = 100;
-  const start = Math.min(LEVELS.length - 1, Number(params.get('level')) || 0);
   const seed = params.has('seed') ? Number(params.get('seed')) : randomSeed();
-  loadLevel(start, seed);
+  loadLevel(Math.min(LEVELS.length - 1, index), seed);
   beginLevel();
   lockPointer();
 }
 
+function defaultTape() {
+  return Math.min(LEVELS.length - 1, Number(params.get('level')) || 0);
+}
+
 function beginLevel() {
   const t = game.level.theme;
+  game.levelT = 0;
   setState('playing');
   game.fade = 0;
   game.glitch = 0.8;
@@ -216,7 +227,7 @@ function toTitle() {
   }
   loadLevel(0, 1996);
   setState('title');
-  showScreen('screen-title');
+  menu.show('title');
 }
 
 // ---------- 상호작용 ----------
@@ -306,6 +317,7 @@ function interact() {
 }
 
 function exitLevel() {
+  recordClear(progress, game.levelIndex, game.levelT, LEVELS.length);
   setState('transition');
   game.transT = 0;
   audio.setStatic(0.5, 0.4);
@@ -328,19 +340,25 @@ function update(dt) {
   vhs.uniforms.time.value = game.time;
 
   if (s === 'title') {
-    // 타이틀 뒤로 레벨 0을 천천히 둘러본다
-    const c = lv.center(...lv.spawnCell);
-    camera.position.set(c.x, 1.6, c.z);
-    camera.rotation.set(Math.sin(game.time * 0.1) * 0.05, game.time * 0.06, 0);
+    // 타이틀 뒤로 레벨 0에서 가장 넓은 방을 천천히 둘러본다
+    if (!game.titleView || game.titleView.level !== lv) {
+      let best = null;
+      for (const r of lv.rooms) if (!best || r.w * r.h > best.w * best.h) best = r;
+      const c = best ? { x: (best.x0 + best.w / 2) * lv.S, z: (best.y0 + best.h / 2) * lv.S } : lv.center(...lv.spawnCell);
+      game.titleView = { level: lv, x: c.x, z: c.z };
+    }
+    camera.position.set(game.titleView.x, 1.55, game.titleView.z);
+    camera.rotation.set(Math.sin(game.time * 0.1) * 0.04, game.time * 0.045 + 0.6, 0);
     lights.update(dt, game.time, camera.position, entity);
-    vhs.uniforms.fade.value = 0.55;
+    vhs.uniforms.fade.value = 0.62;
     vhs.uniforms.stress.value = 0;
-    vhs.uniforms.glitch.value = game.glitch;
+    vhs.uniforms.glitch.value = Math.max(game.glitch, game.menuGlitch);
     return;
   }
   if (s === 'paused' || s === 'dead' || s === 'ending') return;
 
   if (s === 'playing' || s === 'reading' || s === 'transition') game.elapsed += dt;
+  if (s === 'playing' || s === 'reading') game.levelT += dt;
   game.fade = Math.min(1, game.fade + dt * 0.8);
 
   const { steps } = player.update(dt, lv, game.time);
@@ -569,7 +587,6 @@ addEventListener('blur', () => {
   player.keys = {};
 });
 
-$('btn-start').addEventListener('click', startGame);
 $('btn-resume').addEventListener('click', resume);
 $('btn-quit').addEventListener('click', toTitle);
 $('btn-retry').addEventListener('click', retry);
@@ -603,6 +620,24 @@ $('opt-mic').addEventListener('change', async (e) => {
 });
 
 // ---------- 부팅 ----------
+// 메뉴 소리는 오디오가 준비된 뒤에만 (첫 클릭·키 입력 때 만든다)
+const UI_SOUNDS = { move: 'uiMove', select: 'uiSelect', back: 'uiBack', denied: 'denied', insert: 'tapeInsert' };
+const menu = createMenu({
+  levels: LEVELS,
+  progress: () => progress,
+  defaultTape: defaultTape(),
+  test: TEST,
+  onStart: (i) => startGame(i),
+  onFirstInput: () => ensureAudio(),
+  sound: (name) => {
+    if (audio) audio[UI_SOUNDS[name]]();
+  },
+  setGlitch: (pulse, hold) => {
+    game.glitch = Math.max(game.glitch, pulse);
+    if (hold !== undefined) game.menuGlitch = hold;
+  },
+});
+
 if (TEST) {
   window.__noclip = {
     game,
@@ -613,16 +648,19 @@ if (TEST) {
     },
     lights,
     startGame,
+    menu,
+    progress,
     interact,
     loadLevel,
     LEVELS,
     camera,
   };
 }
+
 resize();
 loadLevel(0, 1996);
 applySettings();
-showScreen('screen-title');
+menu.show('title');
 requestAnimationFrame(frame);
 window.__booted = true;
 $('loading').classList.add('hidden');

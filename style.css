@@ -539,3 +539,644 @@ body {
 .blink {
   animation: blink 1s steps(1) infinite;
 }
+
+/* ==========================================================
+   메뉴 (The Classrooms 스타일)
+   - 캠코더 OSD, 흰 붓질 선택 하이라이트, 찢어진 가장자리의 검은 띠,
+     넓게 벌린 대문자, 하단 키 안내
+   ========================================================== */
+:root {
+  --ui: 'Oswald', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --hand: 'Nanum Pen Script', 'Apple SD Gothic Neo', cursive;
+  /* 흰 매직으로 쓱 칠한 듯한 하이라이트 */
+  --brush: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 60' preserveAspectRatio='none'%3E%3Cpath fill='%23f1ede2' d='M6 14 C40 8 80 12 120 9 S200 6 240 10 S285 8 296 12 L293 22 L298 31 L292 40 L296 48 C250 53 200 50 150 54 S70 51 30 55 L4 52 L8 43 L2 34 L7 24 Z'/%3E%3Cpath fill='%23f1ede2' opacity='.55' d='M0 20 L9 18 L8 22 Z M291 44 L300 42 L299 47 Z M30 6 L60 5 L45 9 Z'/%3E%3C/svg%3E");
+}
+
+.screen.menu {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 70% 50%, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.55) 70%);
+}
+.screen.menu#screen-title {
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.55) 38%, rgba(0, 0, 0, 0) 70%),
+    radial-gradient(ellipse at 70% 50%, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.5) 100%);
+}
+.screen.menu#screen-tapes,
+.screen.menu#screen-settings {
+  background: rgba(0, 0, 0, 0.78);
+}
+.screen.menu#screen-tapes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5vh;
+  padding-bottom: 6vh;
+}
+#screen-tapes .panel-head {
+  position: static;
+}
+#screen-tapes.hidden {
+  display: none;
+}
+.hover,
+.menu-warn,
+.dlg-tape,
+.row,
+.mobile-warn {
+  word-break: keep-all;
+}
+
+/* ---------- 캠코더 OSD ---------- */
+.osd {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  font-family: var(--font);
+  font-size: clamp(22px, 2.6vw, 34px);
+  line-height: 1.05;
+  color: var(--fg);
+  text-shadow:
+    1.5px 0 rgba(255, 40, 40, 0.5),
+    -1.5px 0 rgba(40, 140, 255, 0.5);
+}
+.osd > div {
+  position: absolute;
+}
+.osd-tl {
+  top: 4.5vh;
+  left: 4.5vw;
+}
+.osd-tr {
+  top: 4.5vh;
+  right: 4.5vw;
+  text-align: right;
+}
+.osd-bl {
+  bottom: 4.5vh;
+  left: 4.5vw;
+}
+.osd-br {
+  bottom: 4.5vh;
+  right: 4.5vw;
+  font-size: 0.6em;
+  color: var(--dim);
+}
+.osd.blink-mode .osd-tl {
+  animation: blink 1s steps(1) infinite;
+}
+
+/* ---------- 시작 화면 ---------- */
+.menu-col {
+  position: absolute;
+  left: 9vw;
+  top: 50%;
+  transform: translateY(-46%);
+  width: min(460px, 82vw);
+}
+.logo {
+  margin: 0;
+  font-family: var(--font);
+  font-weight: normal;
+  font-size: clamp(76px, 11vw, 150px);
+  line-height: 0.85;
+  letter-spacing: 0.06em;
+}
+.menu-sub {
+  margin: 10px 0 34px;
+  font-family: var(--ui);
+  font-weight: 300;
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  color: var(--dim);
+}
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.mi {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 8px 22px 8px 14px;
+  margin-left: -14px;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+}
+.mi .ko {
+  font-family: var(--ko);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: 0.16em;
+}
+.mi em {
+  font-family: var(--ui);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: rgba(244, 241, 230, 0.45);
+}
+/* 선택된 항목: 흰 붓질 위에 검은 글씨 */
+.mi.focus,
+.mi-yn.focus,
+.tab.active {
+  background: var(--brush) center / 100% 100% no-repeat;
+  color: #0a0908;
+}
+.mi.focus em {
+  color: rgba(10, 9, 8, 0.6);
+}
+.menu-warn {
+  position: absolute;
+  left: 50%;
+  bottom: 4.6vh;
+  transform: translateX(-50%);
+  margin: 0;
+  font-family: var(--ko);
+  font-size: 12px;
+  color: rgba(244, 241, 230, 0.4);
+  white-space: nowrap;
+}
+.mobile-warn {
+  margin: 26px 0 0;
+}
+
+/* 하단 키 안내 */
+.keyhint {
+  position: absolute;
+  left: 50%;
+  bottom: 9vh;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 28px;
+  font-family: var(--ui);
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  color: rgba(244, 241, 230, 0.55);
+  white-space: nowrap;
+}
+#screen-title .keyhint {
+  left: 9vw;
+  transform: none;
+}
+#screen-tapes .keyhint,
+#screen-settings .keyhint {
+  bottom: 4.8vh;
+}
+
+/* ---------- 패널 공통 ---------- */
+.panel-head {
+  position: absolute;
+  top: 13vh;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+.panel-head h2 {
+  margin: 0;
+  font-family: var(--ui);
+  font-weight: 400;
+  font-size: clamp(30px, 3.4vw, 44px);
+  letter-spacing: 0.42em;
+}
+.panel-head p {
+  margin: 8px 0 0;
+  font-family: var(--ko);
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  color: var(--dim);
+}
+.panel-head.left {
+  position: static;
+  text-align: left;
+  margin-bottom: 22px;
+}
+
+/* ---------- 테이프 선택 ---------- */
+.tapes-row {
+  display: flex;
+  gap: clamp(18px, 3vw, 46px);
+  align-items: flex-start;
+}
+.tape {
+  position: relative;
+  width: clamp(190px, 17vw, 250px);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+  transition: transform 0.18s ease;
+}
+/* VHS 슬리브: 검은 플라스틱 케이스 */
+.sleeve {
+  position: relative;
+  padding: 10px 10px 14px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, #1d1b18, #0c0b0a);
+  border: 1px solid #2c2925;
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    box-shadow 0.18s,
+    filter 0.18s;
+  filter: brightness(0.72) saturate(0.8);
+}
+.sleeve-top {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--ui);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: rgba(244, 241, 230, 0.5);
+  margin-bottom: 8px;
+}
+.cover {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid #000;
+}
+.cover img,
+.cover canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: contrast(1.08) saturate(0.85);
+}
+.cover .rec {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-family: var(--font);
+  font-size: 18px;
+  text-shadow: 0 0 4px #000;
+}
+.cover .rec i {
+  font-style: normal;
+  color: var(--red);
+}
+.cover .nosig {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font);
+  font-size: 26px;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 6px #000;
+}
+/* 손글씨 라벨 스티커 */
+.label {
+  position: relative;
+  margin: 12px 4px 0;
+  padding: 6px 10px 4px;
+  background: #e8e2cc;
+  color: #1d1a16;
+  transform: rotate(-1.4deg);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+  clip-path: polygon(0 4%, 3% 0, 97% 2%, 100% 0, 99% 96%, 96% 100%, 2% 98%, 0 100%);
+}
+.label .hand {
+  font-family: var(--hand);
+  font-size: 26px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.tape:nth-child(2) .label {
+  transform: rotate(1deg);
+}
+.meta {
+  margin-top: 12px;
+  font-family: var(--ui);
+  font-size: 12px;
+  letter-spacing: 0.26em;
+  color: rgba(244, 241, 230, 0.7);
+}
+.meta b {
+  font-weight: 500;
+  color: var(--fg);
+}
+/* 마우스를 올리거나 키보드로 고르면 꺼내 든 것처럼 들린다 */
+.tape.focus {
+  transform: translateY(-16px);
+}
+.tape.focus .sleeve {
+  filter: none;
+  box-shadow:
+    0 26px 50px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(244, 241, 230, 0.55);
+}
+.tape .hover {
+  min-height: 92px;
+  margin-top: 16px;
+  font-family: var(--ko);
+  font-size: 13px;
+  line-height: 1.65;
+  color: rgba(244, 241, 230, 0.8);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.18s,
+    transform 0.18s;
+}
+.tape.focus .hover {
+  opacity: 1;
+  transform: none;
+}
+.hover p {
+  margin: 0;
+}
+.hover .threat {
+  margin-top: 6px;
+  color: #ff8f86;
+}
+.hover .best {
+  margin-top: 6px;
+  font-family: var(--ui);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--dim);
+}
+.tape.locked .label {
+  background: #b9b3a0;
+}
+.tape.locked .meta {
+  color: rgba(244, 241, 230, 0.35);
+}
+.tape.shake {
+  animation: shake 0.32s;
+}
+@keyframes shake {
+  20% {
+    transform: translate(-6px, -16px);
+  }
+  40% {
+    transform: translate(6px, -16px);
+  }
+  60% {
+    transform: translate(-4px, -16px);
+  }
+  80% {
+    transform: translate(3px, -16px);
+  }
+}
+
+/* ---------- 설정 ---------- */
+.settings-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -52%);
+  width: min(620px, 90vw);
+}
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid rgba(244, 241, 230, 0.15);
+  padding-bottom: 14px;
+}
+.tab {
+  padding: 6px 18px;
+  border: 0;
+  background: none;
+  font-family: var(--ko);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  color: rgba(244, 241, 230, 0.55);
+  cursor: pointer;
+  outline: none;
+}
+.tab:hover {
+  color: var(--fg);
+}
+.tab-body {
+  min-height: 190px;
+}
+.row {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(244, 241, 230, 0.07);
+  font-family: var(--ko);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+.row small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+/* 가는 흰 슬라이더 */
+.screen input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: rgba(244, 241, 230, 0.35);
+  outline: none;
+  cursor: pointer;
+}
+.screen input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+}
+.screen input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fg);
+}
+/* 토글 스위치 */
+.toggle {
+  -webkit-appearance: none;
+  appearance: none;
+  justify-self: end;
+  width: 46px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(244, 241, 230, 0.2);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fg);
+  transition: left 0.15s;
+}
+.toggle:checked {
+  background: var(--red);
+}
+.toggle:checked::after {
+  left: 27px;
+}
+.keys {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px 24px;
+  font-family: var(--ko);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  color: var(--dim);
+}
+.keys b {
+  font-family: var(--ui);
+  font-weight: 400;
+  letter-spacing: 0.24em;
+  color: var(--fg);
+  text-align: right;
+}
+
+/* ---------- INSERT TAPE? ---------- */
+.dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  align-items: center;
+}
+.band {
+  padding: 46px 16px 40px;
+  background: #050505;
+  text-align: center;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.9);
+}
+.band h3 {
+  margin: 0;
+  font-family: var(--ui);
+  font-weight: 400;
+  font-size: clamp(30px, 3.4vw, 44px);
+  letter-spacing: 0.3em;
+}
+.dlg-tape {
+  margin: 10px 0 26px;
+  font-family: var(--ko);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  color: var(--dim);
+}
+.yn {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+}
+.mi-yn {
+  min-width: 120px;
+  padding: 6px 22px;
+  border: 0;
+  background: none;
+  font-family: var(--ui);
+  font-size: 18px;
+  letter-spacing: 0.3em;
+  color: var(--fg);
+  cursor: pointer;
+  outline: none;
+}
+
+/* ---------- 테이프 삽입 연출 ---------- */
+.insert-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  background: var(--vcr-blue);
+  animation: fx-in 1.15s steps(1) forwards;
+}
+.fx-play {
+  position: absolute;
+  top: 6vh;
+  left: 5vw;
+  font-family: var(--font);
+  font-size: clamp(36px, 5vw, 64px);
+  color: #fff;
+}
+.fx-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14vh;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.5) 0 2px, rgba(0, 0, 0, 0.3) 2px 5px);
+  mix-blend-mode: screen;
+  animation: fx-track 0.5s linear infinite;
+}
+@keyframes fx-track {
+  from {
+    top: 110%;
+  }
+  to {
+    top: -20%;
+  }
+}
+@keyframes fx-in {
+  0% {
+    background: #000;
+  }
+  18% {
+    background: var(--vcr-blue);
+  }
+  70% {
+    background: var(--vcr-blue);
+  }
+  86% {
+    background: #000;
+  }
+}
+
+@media (max-width: 760px) {
+  .screen.menu#screen-tapes {
+    justify-content: flex-start;
+    padding-top: 14vh;
+    overflow-y: auto;
+  }
+  .tapes-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .tape {
+    width: 70vw;
+  }
+  .keyhint {
+    display: none;
+  }
+  .menu-warn {
+    white-space: normal;
+    width: 90vw;
+    text-align: center;
+    bottom: 11vh;
+  }
+}
