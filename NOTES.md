@@ -1,5 +1,7 @@
 # NOCLIP · 실험 노트
 
+> ⚠ 스포일러 주의: 엔티티의 정체와 행동 규칙이 그대로 적혀 있다.
+
 > 게임 소개는 [README.md](README.md)에 있다. 이 문서는 ai-slop 연구소의 실험 기록(개발 노트)이다.
 
 - **플레이**: https://noclip-swart.vercel.app
