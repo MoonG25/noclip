@@ -78,6 +78,9 @@ function limb(profile) {
   );
 }
 
+const lerp = (a, b, t) => a + (b - a) * t;
+const RISE = 1.25; // 일어설 때 몸통을 세우는 각도
+
 export class Hound extends EntityBase {
   get awakeMessage() {
     return '…어딘가에서 무언가가 장판을 긁으며 기어 다니기 시작했다';
@@ -92,7 +95,8 @@ export class Hound extends EntityBase {
     const skin = new THREE.MeshLambertMaterial({ map: tex.houndSkin, side: THREE.DoubleSide });
     const nail = new THREE.MeshLambertMaterial({ color: 0x1a1212 });
     const hairMat = new THREE.MeshLambertMaterial({ color: 0x0b0908 });
-    this.faceMat = new THREE.MeshLambertMaterial({ map: tex.houndFace });
+    // 인형처럼 얼굴은 약하게 스스로 빛나게 해서 어두운 곳에서도 읽히게 한다
+    this.faceMat = new THREE.MeshLambertMaterial({ map: tex.houndFace, emissive: 0x3a332b });
     const add = (parent, geo, mat, x = 0, y = 0, z = 0) => {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
@@ -176,13 +180,16 @@ export class Hound extends EntityBase {
     const head = pivot(hips, 0, -0.29, 1.2);
     head.rotation.x = HEAD_X;
     this.head = head;
+    // 얼굴이 화면에서 읽히도록 머리를 키운다
+    const face = pivot(head, 0, 0, 0);
+    face.scale.setScalar(1.7);
     const SC = new THREE.Vector3(0.86, 1.06, 0.95);
-    add(head, new THREE.SphereGeometry(0.1, 24, 16), this.faceMat).scale.copy(SC);
+    add(face, new THREE.SphereGeometry(0.1, 28, 18), this.faceMat).scale.copy(SC);
     const front = Math.PI / 2;
     const win = 1.2;
-    add(head, new THREE.SphereGeometry(0.106, 20, 12, front + win / 2, Math.PI * 2 - win, 0, Math.PI * 0.62), hairMat).scale.copy(SC);
-    add(head, new THREE.SphereGeometry(0.108, 20, 6, 0, Math.PI * 2, 0, Math.PI * 0.22), hairMat).scale.copy(SC);
-    this.hair = this._hair(head, hairMat, SC);
+    add(face, new THREE.SphereGeometry(0.106, 20, 12, front + win / 2, Math.PI * 2 - win, 0, Math.PI * 0.62), hairMat).scale.copy(SC);
+    add(face, new THREE.SphereGeometry(0.108, 20, 6, 0, Math.PI * 2, 0, Math.PI * 0.22), hairMat).scale.copy(SC);
+    this.hair = this._hair(face, hairMat, SC);
     root.add(blobShadow(tex, 1.0, 2.0, -0.2));
     root.scale.setScalar(1.15);
     return root;
@@ -245,14 +252,18 @@ export class Hound extends EntityBase {
       geo.translate(0, -len / 2, 0);
       geo.applyQuaternion(q.setFromUnitVectors(up, dir));
       geo.translate(root.x, root.y, root.z);
-      (fringe ? fringeGeos : geos).push(geo);
+      if (fringe) fringeGeos.push({ geo, left: root.x < 0 });
+      else geos.push(geo);
     }
     // 앞머리는 따로 둔다. 덮칠 때는 머리카락이 걷히며 얼굴이 드러난다
     const group = new THREE.Group();
     const back = new THREE.Mesh(mergeGeometries(geos), mat);
-    this.fringe = new THREE.Mesh(mergeGeometries(fringeGeos), mat);
+    this.fringe = new THREE.Group();
+    this.fringeL = new THREE.Mesh(mergeGeometries(fringeGeos.filter((f) => f.left).map((f) => f.geo)), mat);
+    this.fringeR = new THREE.Mesh(mergeGeometries(fringeGeos.filter((f) => !f.left).map((f) => f.geo)), mat);
+    this.fringe.add(this.fringeL, this.fringeR);
     group.add(back, this.fringe);
-    [...geos, ...fringeGeos].forEach((x) => x.dispose());
+    [...geos, ...fringeGeos.map((f) => f.geo)].forEach((x) => x.dispose());
     head.add(group);
     return group;
   }
@@ -267,6 +278,7 @@ export class Hound extends EntityBase {
     this.listenYaw = 0;
     this.huntTarget = null;
     this.hips.rotation.set(0, 0, 0);
+    this.rise = 0;
     this.fringe.visible = true;
     this.setScream(false);
   }
@@ -296,7 +308,7 @@ export class Hound extends EntityBase {
       this.listenT = 0;
     } else {
       this._goInvestigate(x, z, level);
-      this._listen(x, z, 0.8, this.pending);
+      this._listen(x, z, 1.6, this.pending);
     }
     return true;
   }
@@ -317,7 +329,7 @@ export class Hound extends EntityBase {
       if (d < 0.7) {
         // 소리 난 자리에 도착. 멈춰서 귀를 기울인 뒤 주변을 더듬는다
         this._goSearch(level.cellAt(h.x, h.z), 9, 1.4);
-        this._listen(h.x + Math.sin(this.yaw), h.z + Math.cos(this.yaw), 1.4, ev);
+        this._listen(h.x + Math.sin(this.yaw), h.z + Math.cos(this.yaw), 2.4, ev);
         ev.push('lost');
       } else {
         const direct = d < 6 && level.lineOfSight(this.pos.x, this.pos.z, h.x, h.z);
@@ -351,6 +363,7 @@ export class Hound extends EntityBase {
     for (const a of this.arms) {
       a.sh.rotation.x = -1.3;
       a.el.rotation.x = 0.2;
+      a.sh.scale.set(1, 1.3, 1);
     }
   }
 
@@ -375,8 +388,25 @@ export class Hound extends EntityBase {
       l.kn.rotation.x = LEG_KNEE + Math.max(0, Math.sin(pl + Math.PI / 2)) * 0.45 * k;
       l.an.rotation.x = -(l.hip.rotation.x + l.kn.rotation.x);
     }
-    this.hips.position.y = HIPS.y + Math.abs(Math.sin(w)) * 0.03 * k;
-    this.hips.rotation.set(hunt ? 0.06 : 0, 0, Math.sin(w) * 0.05 * k);
+    // 귀를 기울일 때는 뒷다리로 천천히 일어선다. 팔은 무릎 아래까지 늘어난다
+    this.rise += ((this.listenT > 0 && !hunt ? 1 : 0) - this.rise) * Math.min(1, dt * 2.6);
+    const u = this.rise;
+    if (u > 0.001) {
+      for (let i = 0; i < 2; i++) {
+        const a = this.arms[i];
+        a.sh.rotation.x = lerp(a.sh.rotation.x, RISE - 0.12 + Math.sin(time * 1.3 + i) * 0.05, u);
+        a.el.rotation.x = lerp(a.el.rotation.x, 0.06, u);
+        a.wr.rotation.x = lerp(a.wr.rotation.x, -0.2, u);
+        a.sh.rotation.z = lerp(0, (i ? 1 : -1) * 0.12, u);
+        a.sh.scale.set(1, lerp(1, 1.5, u), 1);
+        const l = this.legs[i];
+        l.hip.rotation.x = lerp(l.hip.rotation.x, -0.04, u);
+        l.kn.rotation.x = lerp(l.kn.rotation.x, 0.06, u);
+        l.an.rotation.x = -(l.hip.rotation.x + l.kn.rotation.x);
+      }
+    } else for (const a of this.arms) a.sh.scale.set(1, 1, 1);
+    this.hips.position.y = HIPS.y + Math.abs(Math.sin(w)) * 0.03 * k * (1 - u);
+    this.hips.rotation.set(lerp(hunt ? 0.06 : 0, -RISE, u), 0, Math.sin(w) * 0.05 * k);
 
     // 머리: 좌우로 천천히 흔들다가, 귀를 기울일 때는 소리 쪽으로 고개를 꺾는다
     let hx = HEAD_X;
@@ -391,8 +421,13 @@ export class Hound extends EntityBase {
       hx = HEAD_X - 0.3;
       hy = (Math.random() - 0.5) * 0.15;
     }
-    this.head.rotation.set(hx, hy, hz);
+    // 일어서면 고개를 거의 똑바로 세우고 정면을 본다 (살짝만 기울인다)
+    this.head.rotation.set(hx + (RISE + 0.12 - HEAD_X) * u, hy * (1 - u * 0.8), hz * (1 - u * 0.75));
     if (Math.random() < (hunt ? 0.2 : 0.02)) this.head.rotation.z += (Math.random() - 0.5) * 0.8;
     this.hair.rotation.set(0, 0, Math.sin(time * 1.7) * 0.04 + Math.sin(w) * 0.05 * k);
+    // 일어서거나 사냥할 때 앞머리가 양쪽으로 갈라지며 얼굴이 드러난다
+    const reveal = Math.max(u, hunt ? 0.55 : 0);
+    this.fringeL.rotation.set(0, -1.15 * reveal, 0);
+    this.fringeR.rotation.set(0, 1.15 * reveal, 0);
   }
 }

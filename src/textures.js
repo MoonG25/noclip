@@ -640,145 +640,6 @@ function hair() {
   return c;
 }
 
-// 하운드 얼굴. 구의 등장방형 UV에 맞춰 그린다 (얼굴 중심 u=0.25).
-// 눈이 있어야 할 자리는 움푹 꺼진 구멍이고, 입은 귀까지 찢어져 웃고 있다.
-function houndFace(scream) {
-  const W = 1024;
-  const H = 512;
-  const [c, x] = canvas(W, H);
-  const cx = 256;
-  const r = new RNG(55);
-  x.fillStyle = '#c99c8c';
-  x.fillRect(0, 0, W, H);
-  const shade = x.createRadialGradient(cx, 280, 60, cx, 280, 300);
-  shade.addColorStop(0, 'rgba(0,0,0,0)');
-  shade.addColorStop(1, 'rgba(70,35,30,0.45)');
-  x.fillStyle = shade;
-  x.fillRect(0, 0, W, H);
-  stains(x, W, H, 10, '140,80,80', 50, 0.12);
-  // 머리카락에 덮이는 정수리와 뒤통수
-  x.fillStyle = '#0d0a09';
-  x.fillRect(0, 0, W, 110);
-  x.fillRect(440, 0, W - 440, H);
-  x.fillRect(0, 0, 76, H);
-
-  // 이마 주름
-  x.strokeStyle = 'rgba(90,50,45,0.45)';
-  x.lineWidth = 2;
-  for (let i = 0; i < 5; i++) {
-    x.beginPath();
-    for (let k = 0; k <= 10; k++) {
-      const px = cx - 80 + k * 16;
-      const py = 150 + i * 13 + Math.sin(k * 0.9 + i) * 3 + (r.next() - 0.5) * 2;
-      if (k === 0) x.moveTo(px, py);
-      else x.lineTo(px, py);
-    }
-    x.stroke();
-  }
-
-  for (const s of [-1, 1]) {
-    // 눈이 없는, 움푹 꺼진 구멍
-    const ex = cx + s * 58;
-    const ey = 252;
-    const g = x.createRadialGradient(ex, ey, 2, ex, ey, 62);
-    g.addColorStop(0, 'rgba(8,3,3,1)');
-    g.addColorStop(0.35, 'rgba(25,8,8,0.95)');
-    g.addColorStop(0.65, 'rgba(70,30,30,0.55)');
-    g.addColorStop(1, 'rgba(70,30,30,0)');
-    x.fillStyle = g;
-    x.fillRect(ex - 64, ey - 64, 128, 128);
-    x.strokeStyle = 'rgba(80,40,38,0.6)';
-    x.lineWidth = 2;
-    for (let k = 0; k < 3; k++) {
-      x.beginPath();
-      x.arc(ex, ey + 6, 36 + k * 9, Math.PI * 0.15, Math.PI * 0.85);
-      x.stroke();
-    }
-    // 홀쭉하게 꺼진 볼
-    const ch = x.createLinearGradient(cx + s * 70, 0, cx + s * 120, 0);
-    ch.addColorStop(0, 'rgba(60,25,25,0)');
-    ch.addColorStop(1, 'rgba(60,25,25,0.35)');
-    x.fillStyle = ch;
-    x.fillRect(Math.min(cx + s * 70, cx + s * 120), 285, 50, 90);
-  }
-  // 콧구멍
-  x.fillStyle = 'rgba(30,10,10,0.85)';
-  for (const s of [-1, 1]) {
-    x.beginPath();
-    x.ellipse(cx + s * 8, 308, 3, 6, s * 0.3, 0, Math.PI * 2);
-    x.fill();
-  }
-
-  const my = 350;
-  if (!scream) {
-    // 귀까지 찢어진 웃음
-    x.fillStyle = '#2a0b0b';
-    x.beginPath();
-    x.moveTo(cx - 128, my - 22);
-    x.quadraticCurveTo(cx, my + 44, cx + 128, my - 22);
-    x.quadraticCurveTo(cx, my + 6, cx - 128, my - 22);
-    x.fill();
-    x.fillStyle = '#d6c79c';
-    for (let k = -9; k <= 9; k++) {
-      const t = k / 9;
-      const px = cx + t * 112;
-      const top = my - 18 * t * t + 6 + 10 * (1 - t * t);
-      const h = 8 + 10 * (1 - t * t);
-      x.fillRect(px - 4, top - h * 0.55, 8, h * 0.5);
-      x.fillRect(px - 4, top + 2, 8, h * 0.45);
-    }
-    x.strokeStyle = '#5e2424';
-    x.lineWidth = 3;
-    x.beginPath();
-    x.moveTo(cx - 128, my - 22);
-    x.quadraticCurveTo(cx, my + 44, cx + 128, my - 22);
-    x.stroke();
-    x.beginPath();
-    x.moveTo(cx - 128, my - 22);
-    x.quadraticCurveTo(cx, my + 6, cx + 128, my - 22);
-    x.stroke();
-    x.lineWidth = 2;
-    x.strokeStyle = 'rgba(90,40,38,0.6)';
-    for (const s of [-1, 1]) {
-      x.beginPath();
-      x.moveTo(cx + s * 128, my - 22);
-      x.quadraticCurveTo(cx + s * 146, my - 40, cx + s * 150, my - 66);
-      x.stroke();
-    }
-  } else {
-    // 턱이 빠질 듯 벌어진 입
-    x.fillStyle = '#5e2424';
-    x.beginPath();
-    x.ellipse(cx, my + 24, 70, 104, 0, 0, Math.PI * 2);
-    x.fill();
-    x.fillStyle = '#120404';
-    x.beginPath();
-    for (let k = 0; k <= 32; k++) {
-      const a = (k / 32) * Math.PI * 2;
-      const j = 1 + (r.next() - 0.5) * 0.1;
-      x.lineTo(cx + Math.cos(a) * 60 * j, my + 24 + Math.sin(a) * 94 * j);
-    }
-    x.fill();
-    x.fillStyle = '#d6c79c';
-    for (let k = -4; k <= 4; k++) {
-      x.fillRect(cx + k * 12 - 4, my - 70 + Math.abs(k) * 5, 8, 16);
-      x.fillRect(cx + k * 12 - 4, my + 104 - Math.abs(k) * 5, 8, 14);
-    }
-    x.strokeStyle = 'rgba(70,30,28,0.7)';
-    x.lineWidth = 2;
-    for (const s of [-1, 1]) {
-      for (let k = 0; k < 3; k++) {
-        x.beginPath();
-        x.moveTo(cx + s * 66, my + k * 30 - 10);
-        x.lineTo(cx + s * (110 + k * 8), my + k * 34 - 30);
-        x.stroke();
-      }
-    }
-  }
-  grain(x, W, H, 14);
-  return c;
-}
-
 // 하운드 피부: 핏기 없는 살색, 멍, 비치는 핏줄과 갈비뼈
 function houndSkin() {
   const S = 256;
@@ -1280,6 +1141,304 @@ function waterNormal() {
   return c;
 }
 
+// ---------- 하운드 ----------
+function veins(x, r, n, area, color) {
+  x.strokeStyle = color;
+  x.lineWidth = 1.2;
+  for (let i = 0; i < n; i++) {
+    let px = area[0] + r.next() * area[2];
+    let py = area[1] + r.next() * area[3];
+    x.beginPath();
+    x.moveTo(px, py);
+    for (let k = 0; k < 6; k++) {
+      px += (r.next() - 0.5) * 26;
+      py += (r.next() - 0.5) * 26;
+      x.lineTo(px, py);
+    }
+    x.stroke();
+  }
+}
+
+function faceBase(W, H, cx, skin, r) {
+  const [c, x] = canvas(W, H);
+  x.fillStyle = skin;
+  x.fillRect(0, 0, W, H);
+  const shade = x.createRadialGradient(cx, 270, 60, cx, 270, 280);
+  shade.addColorStop(0, 'rgba(0,0,0,0)');
+  shade.addColorStop(1, 'rgba(50,35,35,0.55)');
+  x.fillStyle = shade;
+  x.fillRect(0, 0, W, H);
+  stains(x, W, H, 10, '120,80,90', 46, 0.12);
+  veins(x, r, 26, [60, 120, 400, 300], 'rgba(70,70,120,0.35)');
+  // 움푹 꺼진 볼
+  for (const s of [-1, 1]) {
+    const g = x.createRadialGradient(cx + s * 95, 320, 4, cx + s * 95, 320, 60);
+    g.addColorStop(0, 'rgba(40,25,25,0.4)');
+    g.addColorStop(1, 'rgba(40,25,25,0)');
+    x.fillStyle = g;
+    x.fillRect(cx + s * 95 - 62, 258, 124, 124);
+  }
+  return [c, x];
+}
+
+// 하운드 얼굴: 뒤집힌 눈과 귀까지 찢어진 입 (구의 등장방형 UV, 중심 u=0.25)
+function houndFace(scream) {
+  const W = 1024;
+  const H = 512;
+  const cx = 256;
+  const r = new RNG(201);
+  const [c, x] = faceBase(W, H, cx, '#c9baa9', r);
+  // 정수리·뒤통수는 머리카락이 덮는다
+  x.fillStyle = '#0d0a09';
+  x.fillRect(0, 0, W, 96);
+  x.fillRect(470, 0, W - 470, H);
+  x.fillRect(0, 0, 42, H);
+  for (const s of [-1, 1]) {
+    const ex = cx + s * 60;
+    const ey = 236;
+    // 멍든 눈두덩
+    // 시커멓게 꺼진 눈두덩 (흰자가 멀리서도 튀어 보이게)
+    const b = x.createRadialGradient(ex, ey, 22, ex, ey, 70);
+    b.addColorStop(0, 'rgba(20,6,12,0.97)');
+    b.addColorStop(0.55, 'rgba(45,15,30,0.7)');
+    b.addColorStop(1, 'rgba(60,25,45,0)');
+    x.fillStyle = b;
+    x.fillRect(ex - 72, ey - 72, 144, 144);
+    // 흰자만 남은 눈 (눈동자는 위로 넘어가 가장자리만 보인다)
+    x.save();
+    x.beginPath();
+    x.ellipse(ex, ey, scream ? 34 : 30, scream ? 26 : 19, 0, 0, Math.PI * 2);
+    x.clip();
+    x.fillStyle = '#e9e3d2';
+    x.fillRect(ex - 40, ey - 30, 80, 60);
+    veins(x, r, 7, [ex - 30, ey - 18, 60, 36], 'rgba(170,30,30,0.55)');
+    x.fillStyle = '#2c2a26';
+    x.beginPath();
+    x.arc(ex + s * 4, ey - (scream ? 30 : 26), 13, 0, Math.PI * 2);
+    x.fill();
+    x.restore();
+    x.strokeStyle = '#2a1414';
+    x.lineWidth = 4;
+    x.beginPath();
+    x.ellipse(ex, ey, scream ? 34 : 30, scream ? 26 : 19, 0, Math.PI, Math.PI * 2);
+    x.stroke();
+    x.strokeStyle = 'rgba(160,50,50,0.8)';
+    x.lineWidth = 2.5;
+    x.beginPath();
+    x.ellipse(ex, ey + 1, 30, 20, 0, 0.1, Math.PI - 0.1);
+    x.stroke();
+  }
+  // 코
+  x.fillStyle = 'rgba(90,60,55,0.35)';
+  x.beginPath();
+  x.ellipse(cx, 292, 14, 24, 0, 0, Math.PI * 2);
+  x.fill();
+  x.fillStyle = 'rgba(25,10,10,0.9)';
+  for (const s of [-1, 1]) {
+    x.beginPath();
+    x.ellipse(cx + s * 10, 306, 4, 7, s * 0.4, 0, Math.PI * 2);
+    x.fill();
+  }
+  // 귀까지 찢어진 입
+  const my = 352;
+  const w = 178;
+  const top = scream ? my - 58 : my - 14;
+  const bot = scream ? my + 120 : my + 30;
+  const mouth = () => {
+    x.beginPath();
+    x.moveTo(cx - w, my - 46);
+    x.bezierCurveTo(cx - w * 0.6, top, cx + w * 0.6, top, cx + w, my - 46);
+    x.bezierCurveTo(cx + w * 0.6, bot, cx - w * 0.6, bot, cx - w, my - 46);
+    x.closePath();
+  };
+  x.fillStyle = '#7a2626';
+  mouth();
+  x.fill();
+  x.save();
+  mouth();
+  x.clip();
+  x.fillStyle = '#140405';
+  x.beginPath();
+  x.moveTo(cx - w + 18, my - 40);
+  x.bezierCurveTo(cx - w * 0.6, top + 14, cx + w * 0.6, top + 14, cx + w - 18, my - 40);
+  x.bezierCurveTo(cx + w * 0.6, bot - 16, cx - w * 0.6, bot - 16, cx - w + 18, my - 40);
+  x.fill();
+  // 이빨: 위아래 잇몸을 따라 촘촘하게, 크기가 제각각
+  const teeth = (yOf, dir) => {
+    for (let i = 0; i < 30; i++) {
+      const t = (i + 0.5) / 30;
+      const px = cx - w + 20 + t * (w * 2 - 40);
+      const py = yOf(t);
+      const len = 10 + r.next() * (scream ? 22 : 12);
+      x.fillStyle = r.next() > 0.2 ? '#d8cca4' : '#8f7d52';
+      x.beginPath();
+      x.moveTo(px - 4, py);
+      x.lineTo(px + 4, py);
+      x.lineTo(px + (r.next() - 0.5) * 3, py + dir * len);
+      x.fill();
+    }
+  };
+  const ease = (t) => 1 - Math.pow(2 * t - 1, 2);
+  teeth((t) => my - 44 + (top + 16 - (my - 44)) * ease(t), 1);
+  teeth((t) => my - 44 + (bot - 18 - (my - 44)) * ease(t), -1);
+  x.restore();
+  // 찢어진 입꼬리와 핏자국
+  x.strokeStyle = 'rgba(110,20,20,0.85)';
+  x.lineWidth = 3;
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 4; k++) {
+      x.beginPath();
+      x.moveTo(cx + s * w, my - 46);
+      x.lineTo(cx + s * (w + 16 + k * 6), my - 62 - k * 10 + (r.next() - 0.5) * 8);
+      x.stroke();
+    }
+    x.fillStyle = 'rgba(100,15,15,0.7)';
+    x.fillRect(cx + s * (w - 30) - 3, my - 20, 5, 40 + r.next() * 40);
+  }
+  grain(x, W, H, 12);
+  return c;
+}
+
+// ---------- 떠 있는 익사체 ----------
+// 물에 불어 터질 듯한 살갗: 푸르죽죽한 바탕에 보랏빛 핏줄(부패 무늬), 허옇게 일어난 껍질
+function bloatSkin() {
+  const S = 256;
+  const [c, x] = canvas(S, S);
+  x.fillStyle = '#8f9c95';
+  x.fillRect(0, 0, S, S);
+  stains(x, S, S, 10, '70,90,105', 50, 0.28);
+  stains(x, S, S, 7, '110,120,80', 36, 0.22);
+  stains(x, S, S, 6, '200,205,195', 30, 0.25);
+  x.lineWidth = 1.6;
+  for (let i = 0; i < 40; i++) {
+    x.strokeStyle = `rgba(${rng.next() > 0.4 ? '60,40,90' : '40,60,90'},0.55)`;
+    let px = rng.next() * S;
+    let py = rng.next() * S;
+    x.beginPath();
+    x.moveTo(px, py);
+    for (let k = 0; k < 8; k++) {
+      px += (rng.next() - 0.5) * 28;
+      py += (rng.next() - 0.5) * 28;
+      x.lineTo(px, py);
+    }
+    x.stroke();
+  }
+  grain(x, S, S, 20);
+  return c;
+}
+
+// 얼굴: 퉁퉁 불어 일그러진 얼굴, 하얗게 뒤집힌 눈, 물을 흘리는 벌어진 입 (구의 등장방형 UV, 중심 u=0.25)
+function bloatFace(scream) {
+  const W = 1024;
+  const H = 512;
+  const cx = 256;
+  const r = new RNG(301);
+  const [c, x] = canvas(W, H);
+  x.fillStyle = '#93a19a';
+  x.fillRect(0, 0, W, H);
+  const shade = x.createRadialGradient(cx, 270, 60, cx, 270, 300);
+  shade.addColorStop(0, 'rgba(0,0,0,0)');
+  shade.addColorStop(1, 'rgba(25,35,45,0.6)');
+  x.fillStyle = shade;
+  x.fillRect(0, 0, W, H);
+  stains(x, W, H, 12, '60,75,100', 54, 0.3);
+  stains(x, W, H, 6, '200,205,190', 34, 0.25);
+  veins(x, r, 40, [40, 80, 440, 380], 'rgba(60,40,95,0.5)');
+  // 정수리·뒤통수: 물에 젖어 들러붙은 성긴 머리카락
+  x.fillStyle = 'rgba(14,16,16,0.92)';
+  x.fillRect(0, 0, W, 70);
+  x.fillRect(500, 0, W - 500, H);
+  x.strokeStyle = 'rgba(14,16,16,0.85)';
+  for (let i = 0; i < 50; i++) {
+    const sx = 40 + r.next() * 440;
+    x.lineWidth = 1 + r.next() * 2;
+    x.beginPath();
+    x.moveTo(sx, 60);
+    x.bezierCurveTo(sx + (r.next() - 0.5) * 30, 110, sx + (r.next() - 0.5) * 40, 150, sx + (r.next() - 0.5) * 50, 130 + r.next() * 70);
+    x.stroke();
+  }
+  // 퉁퉁 부은 눈두덩과 하얗게 뒤집힌 눈
+  for (const s of [-1, 1]) {
+    const ex = cx + s * 64;
+    const ey = 250;
+    const b = x.createRadialGradient(ex, ey, 20, ex, ey, 74);
+    b.addColorStop(0, 'rgba(25,20,40,0.95)');
+    b.addColorStop(0.55, 'rgba(50,45,75,0.65)');
+    b.addColorStop(1, 'rgba(60,60,80,0)');
+    x.fillStyle = b;
+    x.fillRect(ex - 76, ey - 76, 152, 152);
+    x.save();
+    x.beginPath();
+    x.ellipse(ex, ey, scream ? 34 : 30, scream ? 30 : 16, s * 0.12, 0, Math.PI * 2);
+    x.clip();
+    const w = x.createRadialGradient(ex - 6, ey - 6, 2, ex, ey, 34);
+    w.addColorStop(0, '#f6f6ee');
+    w.addColorStop(1, '#bfc8c0');
+    x.fillStyle = w;
+    x.fillRect(ex - 40, ey - 34, 80, 68);
+    // 뿌옇게 흐린 홍채가 위로 넘어가 테두리만 보인다
+    x.fillStyle = 'rgba(150,170,175,0.7)';
+    x.beginPath();
+    x.arc(ex + s * 3, ey - (scream ? 26 : 18), 14, 0, Math.PI * 2);
+    x.fill();
+    x.restore();
+    x.strokeStyle = '#2a2230';
+    x.lineWidth = 4;
+    x.beginPath();
+    x.ellipse(ex, ey, scream ? 34 : 30, scream ? 30 : 16, s * 0.12, 0, Math.PI * 2);
+    x.stroke();
+  }
+  // 문드러진 코
+  x.fillStyle = 'rgba(40,40,55,0.5)';
+  x.beginPath();
+  x.ellipse(cx, 312, 20, 18, 0, 0, Math.PI * 2);
+  x.fill();
+  x.fillStyle = '#120c10';
+  for (const s of [-1, 1]) {
+    x.beginPath();
+    x.ellipse(cx + s * 9, 318, 5, 8, s * 0.3, 0, Math.PI * 2);
+    x.fill();
+  }
+  // 늘어져 벌어진 입, 흘러나오는 물과 거품
+  const my = scream ? 392 : 380;
+  const mw = scream ? 70 : 44;
+  const mh = scream ? 98 : 52;
+  x.fillStyle = '#3b2a35';
+  x.beginPath();
+  x.ellipse(cx, my, mw + 12, mh + 12, 0, 0, Math.PI * 2);
+  x.fill();
+  x.fillStyle = '#070506';
+  x.beginPath();
+  for (let k = 0; k <= 30; k++) {
+    const a = (k / 30) * Math.PI * 2;
+    const j = 1 + (r.next() - 0.5) * 0.14;
+    x.lineTo(cx + Math.cos(a) * mw * j, my + Math.sin(a) * mh * j);
+  }
+  x.fill();
+  x.fillStyle = '#b9b29a';
+  for (let k = -3; k <= 3; k++) {
+    if (r.next() < 0.3) continue;
+    x.fillRect(cx + k * 12 - 4, my - mh + 2 + Math.abs(k) * 3, 8, 12 + r.next() * 6);
+  }
+  x.fillStyle = 'rgba(210,225,220,0.55)';
+  for (let k = 0; k < 14; k++) {
+    x.beginPath();
+    x.arc(cx + (r.next() - 0.5) * mw * 1.6, my + mh - 6 + r.next() * 20, 2 + r.next() * 5, 0, Math.PI * 2);
+    x.fill();
+  }
+  // 입가에서 턱 아래로 흐르는 물자국
+  x.strokeStyle = 'rgba(180,200,205,0.4)';
+  x.lineWidth = 6;
+  for (const s of [-1, 1]) {
+    x.beginPath();
+    x.moveTo(cx + s * mw * 0.6, my + mh * 0.7);
+    x.bezierCurveTo(cx + s * mw * 0.7, my + mh + 30, cx + s * mw * 0.5, my + mh + 60, cx + s * mw * 0.65, H);
+    x.stroke();
+  }
+  grain(x, W, H, 14);
+  return c;
+}
+
 function glow() {
   const [c, x] = canvas(128, 128);
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -1347,6 +1506,9 @@ export function makeTextures(renderer) {
     drownedSkin: toTex(drownedSkin(), a),
     drownedFace: toTex(drownedFace(false), a, { repeat: false }),
     drownedScream: toTex(drownedFace(true), a, { repeat: false }),
+    bloatSkin: toTex(bloatSkin(), a),
+    bloatFace: toTex(bloatFace(false), a, { repeat: false }),
+    bloatScream: toTex(bloatFace(true), a, { repeat: false }),
     glow: toTex(glow(), a, { repeat: false }),
     ao: toTex(aoGradient(), a, { repeat: false, srgb: false }),
     vent: toTex(vent(), a, { repeat: false }),
