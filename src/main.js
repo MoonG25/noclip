@@ -600,3 +600,5 @@ resize();
 loadLevel(0, 1996);
 showScreen('screen-title');
 requestAnimationFrame(frame);
+window.__booted = true;
+$('loading').classList.add('hidden');

@@ -113,7 +113,25 @@
       </div>
     </section>
 
-    <div id="loading" class="hidden">LOADING TAPE...</div>
-    <script type="module" src="src/main.js"></script>
+    <div id="loading"><span class="blink">LOADING TAPE...</span></div>
+    <script>
+      // three.js(CDN)나 게임 코드를 불러오지 못하면 버튼이 먹통이 되므로, 대신 안내를 띄운다
+      window.__bootFail = function (detail) {
+        if (window.__booted) return;
+        var el = document.getElementById('loading');
+        el.classList.remove('hidden');
+        el.innerHTML =
+          '<div>테이프를 재생할 수 없습니다</div>' +
+          '<small>인터넷 연결을 확인하고 새로고침해 주세요.<br>WebGL을 지원하는 데스크톱 브라우저(Chrome · Edge · Firefox)가 필요합니다.</small>' +
+          (detail ? '<code>' + String(detail).replace(/[<>&]/g, '') + '</code>' : '');
+      };
+      window.addEventListener('error', function (e) {
+        window.__bootFail(e.message);
+      });
+      setTimeout(function () {
+        window.__bootFail('timeout');
+      }, 20000);
+    </script>
+    <script type="module" src="src/main.js" onerror="__bootFail('module load failed')"></script>
   </body>
 </html>

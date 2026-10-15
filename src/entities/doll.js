@@ -165,15 +165,26 @@ export class Doll extends EntityBase {
       }
     }
     if (!inView) return false;
-    if (this.dist < 3) return true;
+    // 아무리 가까워도 빛이 닿아야 보인다 (어둠 속에서는 눈앞에서도 움직인다)
     if (player.flashOn && player.flashlight.intensity > 5) {
       camera.getWorldDirection(_f);
-      _d.set(this.pos.x - camera.position.x, 1.2 - camera.position.y, this.pos.z - camera.position.z);
-      const dl = _d.length();
-      if (dl < 22 && _f.dot(_d) / dl > Math.cos(0.42)) return true;
+      for (const h of [1.0, 1.6]) {
+        _d.set(this.pos.x - camera.position.x, h - camera.position.y, this.pos.z - camera.position.z);
+        const dl = _d.length();
+        if (dl < 22 && _f.dot(_d) / dl > Math.cos(0.42)) return true;
+      }
     }
+    if (this.dist > 16) return false;
+    // 인형 근처(3.2m)에 켜진 형광등이 있으면 비춰지고 있는 것
     const [cx, cy] = level.cellAt(this.pos.x, this.pos.z);
-    return level.fixtures[cy * level.W + cx].b > 0.3 && this.dist < 16;
+    for (let y = cy - 1; y <= cy + 1; y++) {
+      for (let x = cx - 1; x <= cx + 1; x++) {
+        if (!level.inBounds(x, y)) continue;
+        const f = level.fixtures[y * level.W + x];
+        if (f.b > 0.3 && Math.hypot(f.x - this.pos.x, f.z - this.pos.z) < 3.2) return true;
+      }
+    }
+    return false;
   }
 
   update(dt, { level, player, time, camera, glitch }) {
@@ -216,7 +227,8 @@ export class Doll extends EntityBase {
 
     const moving = this._move(dt, level, target, speed, player.pos, !observed);
     if (moving) this._footstep(dt, this.state === CHASE ? 0.9 : 1.2, ev);
-    if (this.dist < 0.95) ev.push('caught');
+    // 벽 너머로는 잡지 못한다
+    if (this.dist < 0.95 && this.los) ev.push('caught');
     this._animate(dt, time, camera, moving, observed);
     return this._flush(ev);
   }

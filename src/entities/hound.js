@@ -333,7 +333,8 @@ export class Hound extends EntityBase {
 
     const moving = this._move(dt, level, target, speed, null, true);
     if (moving) this._footstep(dt, this.state === CHASE ? 1.3 : 0.8, ev);
-    if (this.dist < 0.95) ev.push('caught');
+    // 벽 너머로는 잡지 못한다
+    if (this.dist < 0.95 && this.los) ev.push('caught');
     this._animate(dt, time, moving);
     return this._flush(ev);
   }
