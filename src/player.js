@@ -4,6 +4,7 @@ const WALK = 2.6;
 const SPRINT = 5.0;
 const CROUCH = 1.3;
 const RADIUS = 0.32;
+const _dir = new THREE.Vector3();
 const WADE = 0.62; // 물속에서는 이만큼 느려진다
 
 export class Player {
@@ -29,10 +30,15 @@ export class Player {
     this.groundY = 0;
     this.inWater = false;
 
-    this.flashlight = new THREE.SpotLight(0xfff1d6, 0, 24, 0.45, 0.6, 1.4);
+    // 손전등: 부드러운 가장자리의 중심광 + 넓게 퍼지는 약한 빛
+    this.flashlight = new THREE.SpotLight(0xfff1d6, 0, 24, 0.36, 0.9, 1.5);
     this.flashlight.position.set(0.12, -0.08, 0);
     this.flashlight.target.position.set(0, -0.12, -1);
-    camera.add(this.flashlight, this.flashlight.target);
+    this.spill = new THREE.SpotLight(0xffe9cc, 0, 12, 0.85, 1, 1.6);
+    this.spill.position.copy(this.flashlight.position);
+    this.spill.target = this.flashlight.target;
+    camera.add(this.flashlight, this.spill, this.flashlight.target);
+    this.beamK = 1;
   }
 
   reset(x, z, yaw) {
@@ -72,6 +78,20 @@ export class Player {
 
   forward(out = new THREE.Vector3()) {
     return this.camera.getWorldDirection(out);
+  }
+
+  // 손전등이 처음 닿는 곳까지의 거리 (벽·바닥·천장). 0.2m 간격으로 6m까지만 본다
+  _beamDistance(level) {
+    const f = this.forward(_dir);
+    const c = this.camera.position;
+    for (let t = 0.2; t < 6; t += 0.2) {
+      const x = c.x + f.x * t;
+      const y = c.y + f.y * t;
+      const z = c.z + f.z * t;
+      const ground = level.groundAt ? level.groundAt(x, z) : 0;
+      if (y < ground || y > level.wallH || level.hitsCollider(x, z, 0.02)) return t;
+    }
+    return 6;
   }
 
   update(dt, level, time) {
@@ -144,9 +164,14 @@ export class Player {
       this.battery = Math.max(0, this.battery - dt * 0.6);
       if (this.battery <= 0) this.flashOn = false;
     }
-    let fi = this.flashOn ? 38 : 0;
+    // 앞이 막혀 있으면 덜 밝게: 벽에 바짝 대도 하얗게 타지 않는다 (캠코더 자동 노출처럼)
+    const hit = this.flashOn ? this._beamDistance(level) : 6;
+    const want = Math.min(1, Math.max(0.16, Math.pow((hit - 0.2) / 2.6, 1.1)));
+    this.beamK += (want - this.beamK) * Math.min(1, dt * 8);
+    let fi = this.flashOn ? 34 * this.beamK : 0;
     if (this.flashOn && this.battery < 15 && Math.sin(time * 37) * Math.sin(time * 13.3) > 0.6) fi *= 0.15;
     this.flashlight.intensity = fi;
+    this.spill.intensity = fi * 0.16;
 
     return { steps, moved };
   }

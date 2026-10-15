@@ -4,7 +4,7 @@
 // 앞을 못 보고 소리로만 사냥한다. 가까이서 소리를 들으면 전력 질주보다 빠르게 그 자리로 달려든다.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { EntityBase, WANDER, CHASE, SEARCH } from './base.js';
+import { EntityBase, WANDER, CHASE, SEARCH, blobShadow } from './base.js';
 
 const ARM_UP = -0.25; // 위팔: 살짝 앞으로
 const ARM_FORE = 0.35; // 아래팔: 뒤로 꺾여 바닥을 짚는다
@@ -183,6 +183,7 @@ export class Hound extends EntityBase {
     add(head, new THREE.SphereGeometry(0.106, 20, 12, front + win / 2, Math.PI * 2 - win, 0, Math.PI * 0.62), hairMat).scale.copy(SC);
     add(head, new THREE.SphereGeometry(0.108, 20, 6, 0, Math.PI * 2, 0, Math.PI * 0.22), hairMat).scale.copy(SC);
     this.hair = this._hair(head, hairMat, SC);
+    root.add(blobShadow(tex, 1.0, 2.0, -0.2));
     root.scale.setScalar(1.15);
     return root;
   }

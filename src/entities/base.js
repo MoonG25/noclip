@@ -7,6 +7,26 @@ export const INVESTIGATE = 'investigate';
 export const CHASE = 'chase';
 export const SEARCH = 'search';
 
+// 발밑의 둥근 그림자. 엔티티가 바닥에 떠 있지 않고 서 있는 것처럼 보이게 한다
+export function blobShadow(tex, sx, sz, z = 0) {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      alphaMap: tex.glow,
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    }),
+  );
+  m.scale.set(sx, 1, sz);
+  m.position.set(0, 0.008, z);
+  return m;
+}
+
 export function angleLerp(a, b, t) {
   let d = b - a;
   while (d > Math.PI) d -= Math.PI * 2;

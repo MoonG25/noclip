@@ -2,7 +2,7 @@
 // 빛 속에서 지켜보는 동안에는 움직이지 못한다.
 // 눈을 떼거나, 불이 꺼지거나 깜빡이거나, 테이프가 튀는 순간 다가온다.
 import * as THREE from 'three';
-import { EntityBase, CHASE } from './base.js';
+import { EntityBase, CHASE, blobShadow } from './base.js';
 
 const HEAD_R = 0.23;
 const _v = new THREE.Vector3();
@@ -134,6 +134,7 @@ export class Doll extends EntityBase {
       this.glints.push(sp);
     }
     this.head = head;
+    g.add(blobShadow(tex, 1.1, 1.1));
     g.visible = false;
     return g;
   }

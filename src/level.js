@@ -570,9 +570,107 @@ export class Level {
     };
 
     if (t.furniture === 'classroom') this._buildClassroom();
+    this._buildAO();
 
     add(wallG, wallMat);
     this._placeItems();
+  }
+
+  // ---------- 접촉 그림자 ----------
+  // 벽 아래·벽 위·벽 앞 바닥에 은은한 그늘 띠를 깐다. 벽이 바닥에 세워 둔 판처럼 보이지 않게 한다
+  _buildAO() {
+    const S = this.S;
+    const WH = this.wallH;
+    const W = this.W;
+    const H = this.H;
+    const t = this.theme;
+    const eps = 0.004;
+    const bands = { base: [], top: [], floor: [] };
+    const push = (list, corners, vFar) => {
+      // corners: 접합선 쪽 두 점(a0, a1), 먼 쪽 두 점(b0, b1)
+      const [a0, a1, b0, b1] = corners;
+      const base = list.length / 5;
+      list.push(...a0, 0, 0, ...a1, 1, 0, ...b0, 0, vFar, ...b1, 1, vFar);
+      return base;
+    };
+    // face: 셀 안쪽을 향한 벽면 한 조각. along: 벽을 따라가는 방향, n: 셀 안쪽 방향
+    const face = (cx, cz, along, n, from, to, ground) => {
+      const p0 = [cx + along[0] * from + n[0] * eps, cz + along[1] * from + n[1] * eps];
+      const p1 = [cx + along[0] * to + n[0] * eps, cz + along[1] * to + n[1] * eps];
+      push(bands.base, [[p0[0], ground, p0[1]], [p1[0], ground, p1[1]], [p0[0], ground + 0.7, p0[1]], [p1[0], ground + 0.7, p1[1]]], 1);
+      push(bands.top, [[p0[0], WH, p0[1]], [p1[0], WH, p1[1]], [p0[0], WH - 0.4, p0[1]], [p1[0], WH - 0.4, p1[1]]], 1);
+      const f = 0.5;
+      const g = ground + 0.003;
+      push(bands.floor, [[p0[0], g, p0[1]], [p1[0], g, p1[1]], [p0[0] + n[0] * f, g, p0[1] + n[1] * f], [p1[0] + n[0] * f, g, p1[1] + n[1] * f]], 1);
+    };
+    const T2 = T / 2;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const c = this.center(x, y);
+        const ground = this.groundAt(c.x, c.z);
+        for (let d = 0; d < 4; d++) {
+          const e = this.getEdge(x, y, d);
+          if (e === OPEN) continue;
+          const n = [-DX[d], -DY[d]];
+          const along = d < 2 ? [0, 1] : [1, 0];
+          const fx = c.x + DX[d] * (S / 2 - T2);
+          const fz = c.z + DY[d] * (S / 2 - T2);
+          const half = S / 2;
+          if (e === WALL) face(fx, fz, along, n, -half, half, ground);
+          else {
+            const g = t.doorW / 2;
+            face(fx, fz, along, n, -half, -g, ground);
+            face(fx, fz, along, n, g, half, ground);
+          }
+        }
+      }
+    }
+    for (const [px, pz] of this.pillars) {
+      const ground = this.groundAt(px + 0.5, pz + 0.5);
+      for (let d = 0; d < 4; d++) {
+        const n = [DX[d], DY[d]];
+        const along = d < 2 ? [0, 1] : [1, 0];
+        face(px + DX[d] * 0.3, pz + DY[d] * 0.3, along, n, -0.3, 0.3, ground);
+      }
+    }
+    const make = (arr, opacity) => {
+      const quads = arr.length / 20;
+      const pos = new Float32Array(quads * 12);
+      const uv = new Float32Array(quads * 8);
+      const idx = [];
+      for (let q = 0; q < quads; q++) {
+        for (let k = 0; k < 4; k++) {
+          const s = (q * 4 + k) * 5;
+          pos.set(arr.slice(s, s + 3), (q * 4 + k) * 3);
+          uv.set(arr.slice(s + 3, s + 5), (q * 4 + k) * 2);
+        }
+        const b = q * 4;
+        idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      const m = new THREE.Mesh(
+        g,
+        new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          alphaMap: this.tex.ao,
+          transparent: true,
+          opacity,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -1,
+        }),
+      );
+      this.group.add(m);
+    };
+    const k = t.ao ?? 1;
+    make(bands.base, 0.62 * k);
+    make(bands.top, 0.4 * k);
+    make(bands.floor, 0.52 * k);
   }
 
   // 마른 데크 바닥, 한 단 꺼진 수영장 바닥과 옆면, 가장자리 턱, 전체를 덮는 수면
@@ -586,11 +684,18 @@ export class Level {
     const basin = [];
     const sides = [];
     const lips = [];
+    const lights = [];
     const quad = (x, y, h, list, uv) => {
       const g = new THREE.PlaneGeometry(S, S);
       g.rotateX(-Math.PI / 2);
       g.translate((x + 0.5) * S, h, (y + 0.5) * S);
       list.push(worldUV(g, uv, uv));
+      if (list === basin) {
+        const c = new THREE.PlaneGeometry(S, S);
+        c.rotateX(-Math.PI / 2);
+        c.translate((x + 0.5) * S, h + 0.01, (y + 0.5) * S);
+        lights.push(worldUV(c, 1 / 2.4, 1 / 2.4));
+      }
     };
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
@@ -628,14 +733,48 @@ export class Level {
     wg.rotateX(-Math.PI / 2);
     wg.translate((W * S) / 2, WATER_Y, (H * S) / 2);
     worldUV(wg, 1 / 3, 1 / 3);
-    this.waterMat = new THREE.MeshLambertMaterial({
+    // 잔물결 노멀맵으로 형광등 빛이 수면 위에서 반짝인다
+    this.waterMat = new THREE.MeshPhongMaterial({
       map: tex.water,
       color: 0x8fd0dc,
       emissive: 0x0d3a44,
+      specular: 0xffffff,
+      shininess: 90,
+      normalMap: tex.waterNormal,
+      normalScale: new THREE.Vector2(0.55, 0.55),
       transparent: true,
-      opacity: 0.52,
+      opacity: 0.55,
       depthWrite: false,
     });
+    this.waterNormalB = tex.waterNormal;
+
+    // 수영장 바닥의 물빛: 서로 다른 방향으로 흐르는 두 겹을 더해 일렁이게 한다
+    this.caustics = [];
+    if (lights.length) {
+      const cg = mergeGeometries(lights);
+      lights.forEach((g) => g.dispose());
+      for (const [scale, op] of [
+        [1, 0.32],
+        [1.37, 0.24],
+      ]) {
+        const map = tex.caustics.clone();
+        map.repeat.set(scale, scale);
+        map.needsUpdate = true;
+        const m = new THREE.Mesh(
+          cg,
+          new THREE.MeshBasicMaterial({
+            map,
+            color: 0xbfefff,
+            transparent: true,
+            opacity: op,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        this.group.add(m);
+        this.caustics.push(map);
+      }
+    }
     const wm = new THREE.Mesh(wg, this.waterMat);
     wm.renderOrder = 1;
     this.group.add(wm);
@@ -801,6 +940,17 @@ export class Level {
   }
 
   _placeItems() {
+    this._shadowGeo = new THREE.PlaneGeometry(0.42, 0.42).rotateX(-Math.PI / 2);
+    this._shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      alphaMap: this.tex.glow,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
     const t = this.theme;
     const r = this.rng;
     const W = this.W;
@@ -833,10 +983,15 @@ export class Level {
       const p = this._freeSpot(cell[0], cell[1], 0.45);
       if (!p) return false;
       const mesh = makeItem(type, this.tex);
-      const iy = this.groundAt(p.x, p.z) + 0.25;
+      const ground = this.groundAt(p.x, p.z);
+      const iy = ground + 0.25;
       mesh.position.set(p.x, iy, p.z);
       this.group.add(mesh);
-      this.items.push({ type, mesh, x: p.x, z: p.z, y: iy, taken: false, phase: r.next() * 10 });
+      // 바닥에 떨어진 둥근 그림자
+      const shadow = new THREE.Mesh(this._shadowGeo, this._shadowMat);
+      shadow.position.set(p.x, ground + 0.006, p.z);
+      this.group.add(shadow);
+      this.items.push({ type, mesh, shadow, x: p.x, z: p.z, y: iy, taken: false, phase: r.next() * 10 });
       return true;
     };
 
@@ -884,6 +1039,9 @@ export class Level {
     this._lastT = time;
     if (this.waterMat) {
       this.waterMat.map.offset.set(time * 0.018, time * 0.011);
+      this.waterMat.normalMap.offset.set(time * 0.03, -time * 0.021);
+      if (this.caustics[0]) this.caustics[0].offset.set(time * 0.035, time * 0.022);
+      if (this.caustics[1]) this.caustics[1].offset.set(-time * 0.027, time * 0.031);
       for (const r of this.ripples) {
         if (!r.m.visible) continue;
         r.life += dt;
@@ -899,7 +1057,9 @@ export class Level {
     }
     for (const it of this.items) {
       if (it.taken || it.type === 'note') continue;
-      it.mesh.position.y = it.y + Math.sin(time * 2 + it.phase) * 0.05;
+      const bob = Math.sin(time * 2 + it.phase) * 0.05;
+      it.mesh.position.y = it.y + bob;
+      if (it.shadow) it.shadow.scale.setScalar(1 - bob * 2);
       it.mesh.rotation.y = time * 0.8 + it.phase;
       if (it.mesh.userData.glow) it.mesh.userData.glow.material.opacity = 0.4 + Math.sin(time * 3 + it.phase) * 0.15;
     }

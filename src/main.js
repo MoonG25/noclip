@@ -75,6 +75,7 @@ function applySettings() {
 const ITEM_LABEL = {
   fuse: '퓨즈 줍기',
   key: '열쇠 줍기',
+  token: '탈의실 토큰 줍기',
   battery: '건전지 줍기',
   water: '아몬드 워터 마시기',
   note: '쪽지 읽기',
@@ -245,9 +246,11 @@ function findTarget() {
     const dy = it.mesh.position.y - cp.y;
     const dz = it.z - cp.z;
     const d = Math.hypot(dx, dy, dz);
-    if (d > 2.4) continue;
+    // 거리는 수평으로 잰다. 물속 바닥에 가라앉은 것도 물가에서 손을 뻗어 주울 수 있게
+    const hd = Math.hypot(dx, dz);
+    if (hd > 2.4 || d > 3.2) continue;
     const dot = (dx * _fwd.x + dy * _fwd.y + dz * _fwd.z) / d;
-    if (dot < 0.82 && d > 1.1) continue;
+    if (dot < 0.82 && hd > 1.1) continue;
     const score = d * (2 - dot);
     if (score < bestScore) {
       bestScore = score;
@@ -295,6 +298,7 @@ function interact() {
   }
   it.taken = true;
   it.mesh.visible = false;
+  if (it.shadow) it.shadow.visible = false;
   audio.pickup();
   game.glitch = Math.max(game.glitch, 0.15);
   if (it.type === lv.theme.goal.item) {

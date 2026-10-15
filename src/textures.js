@@ -1016,6 +1016,78 @@ function drownedFace(scream) {
   return c;
 }
 
+// 접촉 그림자용 세로 그라디언트 (아래 v=0 이 진하고 위로 갈수록 사라진다). alphaMap으로 쓴다
+function aoGradient() {
+  const [c, x] = canvas(4, 128);
+  const g = x.createLinearGradient(0, 128, 0, 0);
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10;
+    const v = Math.round(255 * Math.pow(1 - t, 1.8));
+    g.addColorStop(t, `rgb(${v},${v},${v})`);
+  }
+  x.fillStyle = g;
+  x.fillRect(0, 0, 4, 128);
+  return c;
+}
+
+// 수영장 바닥에 일렁이는 물빛(코스틱). 정수 배 주파수만 써서 이어 붙여도 이음매가 없다
+function caustics() {
+  const S = 256;
+  const [c, x] = canvas(S, S);
+  const img = x.createImageData(S, S);
+  const T = Math.PI * 2;
+  for (let j = 0; j < S; j++) {
+    for (let i = 0; i < S; i++) {
+      const u = (i / S) * T;
+      const w = (j / S) * T;
+      const a = 1 - Math.abs(Math.sin(u * 3 + Math.sin(w * 2 + Math.sin(u * 1)) * 1.6));
+      const b = 1 - Math.abs(Math.sin(w * 3 + Math.sin(u * 2 + Math.sin(w * 1)) * 1.6));
+      const v = Math.min(1, Math.pow(a, 9) + Math.pow(b, 9));
+      const k = (j * S + i) * 4;
+      img.data[k] = img.data[k + 1] = img.data[k + 2] = Math.round(v * 255);
+      img.data[k + 3] = 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
+  return c;
+}
+
+// 잔물결 노멀맵: 높이장 h(x,y) 를 정수 배 사인파로 만들고 기울기로 법선을 구한다
+function waterNormal() {
+  const S = 256;
+  const [c, x] = canvas(S, S);
+  const img = x.createImageData(S, S);
+  const T = Math.PI * 2;
+  const waves = [
+    [3, 1, 0.0, 1.0],
+    [-2, 4, 1.3, 0.7],
+    [5, -3, 2.1, 0.45],
+    [1, 6, 0.4, 0.35],
+  ];
+  for (let j = 0; j < S; j++) {
+    for (let i = 0; i < S; i++) {
+      let dx = 0;
+      let dy = 0;
+      for (const [fx, fy, ph, amp] of waves) {
+        const p = (fx * i + fy * j) * (T / S) + ph;
+        const d = Math.cos(p) * amp;
+        dx += d * fx;
+        dy += d * fy;
+      }
+      const nx = -dx * 0.06;
+      const ny = -dy * 0.06;
+      const l = Math.hypot(nx, ny, 1);
+      const k = (j * S + i) * 4;
+      img.data[k] = Math.round(((nx / l) * 0.5 + 0.5) * 255);
+      img.data[k + 1] = Math.round(((ny / l) * 0.5 + 0.5) * 255);
+      img.data[k + 2] = Math.round(((1 / l) * 0.5 + 0.5) * 255);
+      img.data[k + 3] = 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
+  return c;
+}
+
 function glow() {
   const [c, x] = canvas(128, 128);
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -1084,6 +1156,9 @@ export function makeTextures(renderer) {
     drownedFace: toTex(drownedFace(false), a, { repeat: false }),
     drownedScream: toTex(drownedFace(true), a, { repeat: false }),
     glow: toTex(glow(), a, { repeat: false }),
+    ao: toTex(aoGradient(), a, { repeat: false, srgb: false }),
+    caustics: toTex(caustics(), a, { srgb: false }),
+    waterNormal: toTex(waterNormal(), a, { srgb: false }),
     paper: toTex(paper(), a, { repeat: false }),
   };
 }
