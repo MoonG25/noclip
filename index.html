@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NOCLIP</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud" class="hidden">
+      <div class="hud-tl">
+        <div class="rec"><span class="dot"></span>REC</div>
+        <div class="counter" id="counter">0:00:00</div>
+      </div>
+      <div class="hud-tr">
+        <div class="signal" id="signal" title="정신력"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="battery"><div id="battery-fill"></div></div>
+        <span id="battery-pct">100%</span>
+      </div>
+      <div class="hud-bl">
+        <div id="level-code">LEVEL 0</div>
+        <div id="objective">퓨즈 0/3</div>
+      </div>
+      <div class="hud-br">
+        <div id="clock">AM 3:14:00</div>
+        <div id="date">OCT. 15 1996</div>
+      </div>
+      <div id="crosshair"></div>
+      <div id="stamina"><div id="stamina-fill"></div></div>
+      <div id="prompt"></div>
+      <div id="message"></div>
+      <div id="mic-meter" class="hidden"><span>MIC</span><div><div id="mic-fill"></div></div></div>
+    </div>
+
+    <div id="note" class="hidden">
+      <div class="paper">
+        <div id="note-text"></div>
+        <div class="hint">[E] 닫기</div>
+      </div>
+    </div>
+
+    <div id="titlecard" class="hidden">
+      <div id="tc-code"></div>
+      <div id="tc-name"></div>
+      <div id="tc-hint"></div>
+    </div>
+
+    <section id="screen-title" class="screen">
+      <div class="panel">
+        <h1 class="glitch" data-text="NOCLIP">NOCLIP</h1>
+        <p class="sub">탐사 기록 테이프 #0 · 1996. 10. 15</p>
+        <p class="story">
+          1996년 10월 15일 새벽, 폐교된 학교 지하를 조사하던 촬영팀의 마지막 테이프.<br />
+          보일러실 벽 너머에는 끝없이 이어지는 노란 방이 있었다.
+        </p>
+        <div class="controls">
+          <span><b>WASD</b> 이동</span>
+          <span><b>마우스</b> 시점</span>
+          <span><b>Shift</b> 달리기</span>
+          <span><b>C</b> 웅크리기</span>
+          <span><b>F</b> 손전등</span>
+          <span><b>E</b> 줍기 · 상호작용</span>
+          <span><b>Esc</b> 일시정지</span>
+        </div>
+        <div class="options">
+          <label><input type="checkbox" id="opt-mic" /> 마이크 사용 — 실제로 소리를 내면 그것이 듣는다</label>
+          <label>마우스 감도 <input type="range" id="opt-sens" min="0.4" max="2.5" step="0.1" value="1" /></label>
+        </div>
+        <button id="btn-start" class="btn">● 녹화 시작</button>
+        <p class="warn">헤드폰 권장 · 화면 깜빡임과 갑작스러운 큰 소리가 있습니다</p>
+      </div>
+    </section>
+
+    <section id="screen-pause" class="screen hidden">
+      <div class="panel">
+        <h2>❚❚ PAUSE</h2>
+        <p class="sub">클릭하면 녹화를 이어갑니다</p>
+        <button id="btn-resume" class="btn">▶ 계속</button>
+        <button id="btn-quit" class="btn ghost">■ 타이틀로</button>
+      </div>
+    </section>
+
+    <section id="screen-dead" class="screen blue hidden">
+      <div class="panel">
+        <h2>NO SIGNAL</h2>
+        <p class="sub">신호 없음</p>
+        <p class="story" id="dead-text">테이프가 여기서 끊겨 있다.</p>
+        <button id="btn-retry" class="btn">◀◀ 되감기</button>
+        <button id="btn-dead-quit" class="btn ghost">■ 타이틀로</button>
+      </div>
+    </section>
+
+    <section id="screen-end" class="screen hidden">
+      <div class="panel">
+        <h2>■ STOP</h2>
+        <p class="sub">녹화 종료</p>
+        <p class="story" id="end-text"></p>
+        <button id="btn-again" class="btn">● 처음부터</button>
+      </div>
+    </section>
+
+    <div id="loading" class="hidden">LOADING TAPE...</div>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
