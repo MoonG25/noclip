@@ -1,9 +1,12 @@
 # NOCLIP — 웹 브라우저 백룸 공포게임
 
+> **▶ 바로 플레이: https://noclip-swart.vercel.app** (데스크톱 브라우저 · 헤드폰 권장)
+
 - **시작일**: 2026-10-15
 - **상태**: ✅ 플레이 가능 (v0.1)
 - **레퍼런스**: [The Classrooms](https://store.steampowered.com/app/2099110/The_Classrooms/) (Steam, 절차 생성 · 파운드 푸티지 · 리미널 스페이스 호러)
 - **사용 라이브러리**: [three.js](https://github.com/mrdoob/three.js) `r160` (CDN, MIT)
+- **저장소**: [MoonG25/noclip](https://github.com/MoonG25/noclip) · `main`에 푸시하면 Vercel에 자동 배포된다
 
 ## 왜 해보는가
 
@@ -58,7 +61,7 @@ The Classrooms는 1996년 VHS 테이프라는 설정 아래, 매번 다르게 �
 ES 모듈을 쓰기 때문에 `file://`로는 열리지 않는다. 로컬 서버가 필요하다.
 
 ```bash
-cd experiments/2026-10-15-backrooms-noclip
+# 저장소 루트에서
 python3 -m http.server 8765
 # 브라우저에서 http://localhost:8765 열기
 ```
