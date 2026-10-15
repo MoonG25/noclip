@@ -734,148 +734,6 @@ function ripple() {
   return c;
 }
 
-// 익사체 피부: 물에 불어 쭈글쭈글하고 푸르스름한 살갗
-function drownedSkin() {
-  const S = 256;
-  const [c, x] = canvas(S, S);
-  x.fillStyle = '#97a39f';
-  x.fillRect(0, 0, S, S);
-  stains(x, S, S, 10, '80,100,110', 46, 0.2);
-  stains(x, S, S, 6, '120,90,95', 30, 0.18);
-  x.lineWidth = 1;
-  for (let i = 0; i < 70; i++) {
-    x.strokeStyle = `rgba(${rng.next() > 0.5 ? '70,80,90' : '200,210,205'},0.25)`;
-    const y = rng.next() * S;
-    x.beginPath();
-    x.moveTo(0, y);
-    for (let px = 0; px <= S; px += 16) x.lineTo(px, y + (rng.next() - 0.5) * 6);
-    x.stroke();
-  }
-  for (let i = 0; i < 18; i++) {
-    x.strokeStyle = 'rgba(60,70,120,0.4)';
-    let px = rng.next() * S;
-    let py = rng.next() * S;
-    x.beginPath();
-    x.moveTo(px, py);
-    for (let k = 0; k < 6; k++) {
-      px += (rng.next() - 0.5) * 30;
-      py += (rng.next() - 0.5) * 30;
-      x.lineTo(px, py);
-    }
-    x.stroke();
-  }
-  grain(x, S, S, 18);
-  return c;
-}
-
-// 익사체 얼굴: 구의 등장방형 UV (얼굴 중심 u=0.25). 머리가 거꾸로 매달리므로 화면에서는 뒤집혀 보인다.
-// 눈이 있어야 할 자리는 검게 꺼진 구멍, 입은 코 밑에서 턱까지 세로로 찢어져 있다
-function drownedFace(scream) {
-  const W = 1024;
-  const H = 512;
-  const [c, x] = canvas(W, H);
-  const cx = 256;
-  const r = new RNG(31);
-  x.fillStyle = '#9aa6a3';
-  x.fillRect(0, 0, W, H);
-  const shade = x.createRadialGradient(cx, 260, 50, cx, 260, 300);
-  shade.addColorStop(0, 'rgba(0,0,0,0)');
-  shade.addColorStop(1, 'rgba(25,35,45,0.6)');
-  x.fillStyle = shade;
-  x.fillRect(0, 0, W, H);
-  stains(x, W, H, 12, '60,80,100', 50, 0.2);
-  stains(x, W, H, 6, '110,80,90', 30, 0.2);
-  // 비치는 핏줄
-  x.lineWidth = 1.5;
-  for (let i = 0; i < 40; i++) {
-    x.strokeStyle = `rgba(${r.next() > 0.5 ? '50,60,120' : '90,40,60'},0.45)`;
-    let px = r.next() * 520;
-    let py = r.next() * H;
-    x.beginPath();
-    x.moveTo(px, py);
-    for (let k = 0; k < 7; k++) {
-      px += (r.next() - 0.5) * 34;
-      py += (r.next() - 0.5) * 34;
-      x.lineTo(px, py);
-    }
-    x.stroke();
-  }
-  // 퀭하게 꺼진 눈구멍 (아주 작은 빛만 남아 있다)
-  for (const s of [-1, 1]) {
-    const ex = cx + s * 58;
-    const ey = 230;
-    const g = x.createRadialGradient(ex, ey, 2, ex, ey, 54);
-    g.addColorStop(0, 'rgba(2,2,4,1)');
-    g.addColorStop(0.45, 'rgba(10,8,12,0.95)');
-    g.addColorStop(0.75, 'rgba(40,40,55,0.5)');
-    g.addColorStop(1, 'rgba(40,40,55,0)');
-    x.fillStyle = g;
-    x.beginPath();
-    x.ellipse(ex, ey, 54, 46, s * 0.25, 0, Math.PI * 2);
-    x.fill();
-    x.fillStyle = scream ? 'rgba(255,255,255,0.95)' : 'rgba(220,230,220,0.6)';
-    x.beginPath();
-    x.arc(ex + s * 4, ey + 6, scream ? 4 : 2.5, 0, Math.PI * 2);
-    x.fill();
-  }
-  // 콧구멍만 남은 코
-  x.fillStyle = 'rgba(15,10,12,0.9)';
-  for (const s of [-1, 1]) {
-    x.beginPath();
-    x.ellipse(cx + s * 9, 300, 4, 9, s * 0.3, 0, Math.PI * 2);
-    x.fill();
-  }
-  // 세로로 찢어진 입: 가장자리에 이빨이 촘촘하다
-  const top = 318;
-  const bot = scream ? 500 : 440;
-  const half = scream ? 46 : 14;
-  x.fillStyle = '#4a1e24';
-  x.beginPath();
-  x.ellipse(cx, (top + bot) / 2, half + 10, (bot - top) / 2 + 6, 0, 0, Math.PI * 2);
-  x.fill();
-  x.fillStyle = '#070304';
-  x.beginPath();
-  x.moveTo(cx, top);
-  for (let k = 0; k <= 20; k++) {
-    const t = k / 20;
-    x.lineTo(cx + Math.sin(t * Math.PI) * half * (1 + (r.next() - 0.5) * 0.2), top + (bot - top) * t);
-  }
-  for (let k = 20; k >= 0; k--) {
-    const t = k / 20;
-    x.lineTo(cx - Math.sin(t * Math.PI) * half * (1 + (r.next() - 0.5) * 0.2), top + (bot - top) * t);
-  }
-  x.fill();
-  x.fillStyle = '#cfc6a6';
-  const n = scream ? 9 : 7;
-  for (let k = 0; k < n; k++) {
-    const t = (k + 0.5) / n;
-    const w = Math.sin(t * Math.PI) * half;
-    const y = top + (bot - top) * t;
-    const tl = scream ? 22 : 9;
-    x.beginPath();
-    x.moveTo(cx - w - 2, y - 6);
-    x.lineTo(cx - w + tl, y);
-    x.lineTo(cx - w - 2, y + 6);
-    x.fill();
-    x.beginPath();
-    x.moveTo(cx + w + 2, y - 6);
-    x.lineTo(cx + w - tl, y);
-    x.lineTo(cx + w + 2, y + 6);
-    x.fill();
-  }
-  // 정수리 쪽 젖은 머리카락 몇 가닥
-  x.strokeStyle = 'rgba(15,18,20,0.8)';
-  for (let i = 0; i < 40; i++) {
-    const sx = 60 + r.next() * 400;
-    x.lineWidth = 1 + r.next() * 1.5;
-    x.beginPath();
-    x.moveTo(sx, 40 + r.next() * 30);
-    x.bezierCurveTo(sx + (r.next() - 0.5) * 30, 90, sx + (r.next() - 0.5) * 40, 130, sx + (r.next() - 0.5) * 50, 120 + r.next() * 40);
-    x.stroke();
-  }
-  grain(x, W, H, 14);
-  return c;
-}
 
 // ---------- 소품 ----------
 // 천장 환기구 그릴
@@ -1299,143 +1157,17 @@ function houndFace(scream) {
   return c;
 }
 
-// ---------- 떠 있는 익사체 ----------
-// 물에 불어 터질 듯한 살갗: 푸르죽죽한 바탕에 보랏빛 핏줄(부패 무늬), 허옇게 일어난 껍질
-function bloatSkin() {
-  const S = 256;
-  const [c, x] = canvas(S, S);
-  x.fillStyle = '#8f9c95';
-  x.fillRect(0, 0, S, S);
-  stains(x, S, S, 10, '70,90,105', 50, 0.28);
-  stains(x, S, S, 7, '110,120,80', 36, 0.22);
-  stains(x, S, S, 6, '200,205,195', 30, 0.25);
-  x.lineWidth = 1.6;
-  for (let i = 0; i < 40; i++) {
-    x.strokeStyle = `rgba(${rng.next() > 0.4 ? '60,40,90' : '40,60,90'},0.55)`;
-    let px = rng.next() * S;
-    let py = rng.next() * S;
-    x.beginPath();
-    x.moveTo(px, py);
-    for (let k = 0; k < 8; k++) {
-      px += (rng.next() - 0.5) * 28;
-      py += (rng.next() - 0.5) * 28;
-      x.lineTo(px, py);
-    }
-    x.stroke();
-  }
-  grain(x, S, S, 20);
-  return c;
-}
 
-// 얼굴: 퉁퉁 불어 일그러진 얼굴, 하얗게 뒤집힌 눈, 물을 흘리는 벌어진 입 (구의 등장방형 UV, 중심 u=0.25)
-function bloatFace(scream) {
-  const W = 1024;
-  const H = 512;
-  const cx = 256;
-  const r = new RNG(301);
-  const [c, x] = canvas(W, H);
-  x.fillStyle = '#93a19a';
-  x.fillRect(0, 0, W, H);
-  const shade = x.createRadialGradient(cx, 270, 60, cx, 270, 300);
-  shade.addColorStop(0, 'rgba(0,0,0,0)');
-  shade.addColorStop(1, 'rgba(25,35,45,0.6)');
-  x.fillStyle = shade;
-  x.fillRect(0, 0, W, H);
-  stains(x, W, H, 12, '60,75,100', 54, 0.3);
-  stains(x, W, H, 6, '200,205,190', 34, 0.25);
-  veins(x, r, 40, [40, 80, 440, 380], 'rgba(60,40,95,0.5)');
-  // 정수리·뒤통수: 물에 젖어 들러붙은 성긴 머리카락
-  x.fillStyle = 'rgba(14,16,16,0.92)';
-  x.fillRect(0, 0, W, 70);
-  x.fillRect(500, 0, W - 500, H);
-  x.strokeStyle = 'rgba(14,16,16,0.85)';
-  for (let i = 0; i < 50; i++) {
-    const sx = 40 + r.next() * 440;
-    x.lineWidth = 1 + r.next() * 2;
-    x.beginPath();
-    x.moveTo(sx, 60);
-    x.bezierCurveTo(sx + (r.next() - 0.5) * 30, 110, sx + (r.next() - 0.5) * 40, 150, sx + (r.next() - 0.5) * 50, 130 + r.next() * 70);
-    x.stroke();
-  }
-  // 퉁퉁 부은 눈두덩과 하얗게 뒤집힌 눈
-  for (const s of [-1, 1]) {
-    const ex = cx + s * 64;
-    const ey = 250;
-    const b = x.createRadialGradient(ex, ey, 20, ex, ey, 74);
-    b.addColorStop(0, 'rgba(25,20,40,0.95)');
-    b.addColorStop(0.55, 'rgba(50,45,75,0.65)');
-    b.addColorStop(1, 'rgba(60,60,80,0)');
-    x.fillStyle = b;
-    x.fillRect(ex - 76, ey - 76, 152, 152);
-    x.save();
-    x.beginPath();
-    x.ellipse(ex, ey, scream ? 34 : 30, scream ? 30 : 16, s * 0.12, 0, Math.PI * 2);
-    x.clip();
-    const w = x.createRadialGradient(ex - 6, ey - 6, 2, ex, ey, 34);
-    w.addColorStop(0, '#f6f6ee');
-    w.addColorStop(1, '#bfc8c0');
-    x.fillStyle = w;
-    x.fillRect(ex - 40, ey - 34, 80, 68);
-    // 뿌옇게 흐린 홍채가 위로 넘어가 테두리만 보인다
-    x.fillStyle = 'rgba(150,170,175,0.7)';
-    x.beginPath();
-    x.arc(ex + s * 3, ey - (scream ? 26 : 18), 14, 0, Math.PI * 2);
-    x.fill();
-    x.restore();
-    x.strokeStyle = '#2a2230';
-    x.lineWidth = 4;
-    x.beginPath();
-    x.ellipse(ex, ey, scream ? 34 : 30, scream ? 30 : 16, s * 0.12, 0, Math.PI * 2);
-    x.stroke();
-  }
-  // 문드러진 코
-  x.fillStyle = 'rgba(40,40,55,0.5)';
-  x.beginPath();
-  x.ellipse(cx, 312, 20, 18, 0, 0, Math.PI * 2);
-  x.fill();
-  x.fillStyle = '#120c10';
-  for (const s of [-1, 1]) {
-    x.beginPath();
-    x.ellipse(cx + s * 9, 318, 5, 8, s * 0.3, 0, Math.PI * 2);
-    x.fill();
-  }
-  // 늘어져 벌어진 입, 흘러나오는 물과 거품
-  const my = scream ? 392 : 380;
-  const mw = scream ? 70 : 44;
-  const mh = scream ? 98 : 52;
-  x.fillStyle = '#3b2a35';
-  x.beginPath();
-  x.ellipse(cx, my, mw + 12, mh + 12, 0, 0, Math.PI * 2);
-  x.fill();
-  x.fillStyle = '#070506';
-  x.beginPath();
-  for (let k = 0; k <= 30; k++) {
-    const a = (k / 30) * Math.PI * 2;
-    const j = 1 + (r.next() - 0.5) * 0.14;
-    x.lineTo(cx + Math.cos(a) * mw * j, my + Math.sin(a) * mh * j);
-  }
-  x.fill();
-  x.fillStyle = '#b9b29a';
-  for (let k = -3; k <= 3; k++) {
-    if (r.next() < 0.3) continue;
-    x.fillRect(cx + k * 12 - 4, my - mh + 2 + Math.abs(k) * 3, 8, 12 + r.next() * 6);
-  }
-  x.fillStyle = 'rgba(210,225,220,0.55)';
-  for (let k = 0; k < 14; k++) {
-    x.beginPath();
-    x.arc(cx + (r.next() - 0.5) * mw * 1.6, my + mh - 6 + r.next() * 20, 2 + r.next() * 5, 0, Math.PI * 2);
-    x.fill();
-  }
-  // 입가에서 턱 아래로 흐르는 물자국
-  x.strokeStyle = 'rgba(180,200,205,0.4)';
-  x.lineWidth = 6;
-  for (const s of [-1, 1]) {
-    x.beginPath();
-    x.moveTo(cx + s * mw * 0.6, my + mh * 0.7);
-    x.bezierCurveTo(cx + s * mw * 0.7, my + mh + 30, cx + s * mw * 0.5, my + mh + 60, cx + s * mw * 0.65, H);
-    x.stroke();
-  }
-  grain(x, W, H, 14);
+// 탈출로 너머의 빛: 가운데는 하얗게 타고 가장자리로 갈수록 따뜻하게 번진다
+function doorLight() {
+  const [c, x] = canvas(256, 512);
+  const g = x.createRadialGradient(128, 300, 10, 128, 300, 300);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.35, '#fffaf0');
+  g.addColorStop(0.7, '#f3ead2');
+  g.addColorStop(1, '#d8cfb6');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 256, 512);
   return c;
 }
 
@@ -1503,13 +1235,8 @@ export function makeTextures(renderer) {
     poolBasin: toTex(tiles(512, 10, [120, 186, 204], '#5f8e9a', 14, 4), a),
     water: toTex(water(), a),
     ripple: toTex(ripple(), a, { repeat: false }),
-    drownedSkin: toTex(drownedSkin(), a),
-    drownedFace: toTex(drownedFace(false), a, { repeat: false }),
-    drownedScream: toTex(drownedFace(true), a, { repeat: false }),
-    bloatSkin: toTex(bloatSkin(), a),
-    bloatFace: toTex(bloatFace(false), a, { repeat: false }),
-    bloatScream: toTex(bloatFace(true), a, { repeat: false }),
     glow: toTex(glow(), a, { repeat: false }),
+    doorLight: toTex(doorLight(), a, { repeat: false }),
     ao: toTex(aoGradient(), a, { repeat: false, srgb: false }),
     vent: toTex(vent(), a, { repeat: false }),
     corkboard: toTex(corkboard(), a, { repeat: false }),

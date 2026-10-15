@@ -56,7 +56,8 @@ export class LightRig {
         const w = Math.sin(time * 0.5 + f.phase) * Math.sin(time * 1.3 + f.phase * 2);
         if (w > 0.55) b = hash1(slot + f.phase) > 0.45 ? 1 : 0.08;
       }
-      const de = Math.hypot(f.x - ex, f.z - ez);
+      const we = lv.wrapDelta(f.x - ex, f.z - ez);
+      const de = Math.hypot(we.x, we.z);
       if (de < fl.radius && b > 0) {
         const p = (1 - de / fl.radius) * fl.chance;
         if (hash1(slot * 1.7 + f.phase) < p) b = 0.05;
@@ -79,11 +80,13 @@ export class LightRig {
     for (let i = 0; i < fx.length; i++) {
       const f = fx[i];
       if (f.state === 0) continue;
-      const d = (f.x - cam.x) ** 2 + (f.z - cam.z) ** 2;
+      const w = lv.wrapDelta(f.x - cam.x, f.z - cam.z);
+      const d = w.x * w.x + w.z * w.z;
       if (d > 196) continue;
-      near.push([d, f]);
+      near.push([d, f, cam.x + w.x, cam.z + w.z]);
     }
     near.sort((a, b) => a[0] - b[0]);
+    this.nearest = near; // 소리도 같은 등을 쓴다 (형광등 웅웅거림)
     let local = 0;
     for (let i = 0; i < POOL; i++) {
       const l = this.lights[i];
@@ -93,7 +96,7 @@ export class LightRig {
         continue;
       }
       const f = n[1];
-      l.position.set(f.x, lv.wallH - 0.35, f.z);
+      l.position.set(n[2], lv.wallH - 0.35, n[3]);
       l.intensity = this.base * f.b;
       local += f.b * Math.max(0, 1 - Math.sqrt(n[0]) / 7);
     }

@@ -202,3 +202,55 @@ export function deskGeoms(x, z, rot) {
   }
   return { wood, metal };
 }
+
+// 풀룸 탈출로: 흰 타일 벽에 뚫린 아치형 입구, 그 너머는 하얀 빛뿐이다. 로컬 +z 방향을 바라본다
+export function makeLightExit(tex) {
+  const g = new THREE.Group();
+  const W = 1.5;
+  const H = 2.5;
+  // 빛 (안개에 묻히지 않아서 멀리서도 희미하게 보인다)
+  // 색을 1보다 크게 줘서 노출이 날아간 듯 하얗게 탄다
+  const lightMat = new THREE.MeshBasicMaterial({ map: tex.doorLight, fog: false });
+  lightMat.color.setRGB(2.6, 2.5, 2.3);
+  const light = new THREE.Mesh(new THREE.PlaneGeometry(W, H), lightMat);
+  light.position.set(0, H / 2, 0.012);
+  g.add(light);
+  const arch = new THREE.Mesh(new THREE.CircleGeometry(W / 2, 24, 0, Math.PI), lightMat);
+  arch.position.set(0, H, 0.012);
+  g.add(arch);
+  // 둥근 아치 테두리
+  const trimMat = new THREE.MeshLambertMaterial({ color: 0xf2f4f0 });
+  for (const s of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, H, 0.1), trimMat);
+    post.position.set(s * (W / 2 + 0.06), H / 2, 0.05);
+    g.add(post);
+  }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(W / 2 + 0.06, 0.06, 6, 24, Math.PI), trimMat);
+  ring.position.set(0, H, 0.05);
+  g.add(ring);
+  // 입구에서 바닥으로 쏟아지는 빛
+  const spill = new THREE.Mesh(
+    new THREE.PlaneGeometry(W * 1.6, 3.2).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({
+      map: tex.glow,
+      color: 0xfff6e0,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  spill.position.set(0, 0.012, 1.2);
+  g.add(spill);
+  const halo = glowSprite(tex, 0xfff4dc, 5.5, 0.85);
+  halo.position.set(0, 1.5, 0.4);
+  g.add(halo);
+  const lamp = new THREE.PointLight(0xfff1d8, 7, 10, 1.6);
+  lamp.position.set(0, 1.4, 0.7);
+  g.add(lamp);
+  return {
+    group: g,
+    halo,
+    setUnlocked() {},
+  };
+}

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG } from './rng.js';
-import { box, worldUV, makeItem, makeExit, deskGeoms } from './props.js';
+import { box, worldUV, makeItem, makeExit, makeLightExit, deskGeoms } from './props.js';
 
 export const OPEN = 0;
 export const WALL = 1;
@@ -24,8 +24,10 @@ export class Level {
     const H = (this.H = theme.H);
     this.S = theme.cell;
     this.wallH = theme.wallH;
-    this.v = new Uint8Array((W - 1) * H).fill(WALL); // (x,y)-(x+1,y)
-    this.h = new Uint8Array(W * (H - 1)).fill(WALL); // (x,y)-(x,y+1)
+    // 풀룸처럼 wrap 인 레벨은 맵의 양 끝이 이어진다 (끝없이 걸어도 벽에 닿지 않는다)
+    this.wrap = !!theme.wrap;
+    this.v = new Uint8Array(W * H).fill(WALL); // (x,y)-(x+1,y), 마지막 열은 순환할 때만 쓴다
+    this.h = new Uint8Array(W * H).fill(WALL); // (x,y)-(x,y+1), 마지막 행은 순환할 때만 쓴다
     this.pv = new Uint8Array(this.v.length);
     this.ph = new Uint8Array(this.h.length);
     this.roomOf = new Int16Array(W * H).fill(-1);
@@ -39,22 +41,82 @@ export class Level {
     this.colliders = [];
     this.cgrid = Array.from({ length: W * H }, () => []);
     this.reserved = new Set();
-    this.group = new THREE.Group();
+    this.group = new THREE.Group(); // 벽·바닥 같은 고정 지오메트리 (순환 레벨은 주변에 복제본을 둔다)
+    this.dyn = new THREE.Group(); // 아이템·쪽지·출구: 매 프레임 카메라에 가장 가까운 위치로 옮긴다
+    this.root = new THREE.Group();
+    this.root.add(this.group, this.dyn);
     this._generate();
     this._build();
+    this._buildCopies();
+  }
+
+  // 순환 레벨: 고정 지오메트리를 주변 8칸에 복제해 이음매가 보이지 않게 한다 (지오메트리·재질은 공유)
+  _buildCopies() {
+    this.copies = [];
+    if (!this.wrap) return;
+    const WS = this.W * this.S;
+    const HS = this.H * this.S;
+    for (const oz of [-HS, 0, HS]) {
+      for (const ox of [-WS, 0, WS]) {
+        if (!ox && !oz) continue;
+        const c = this.group.clone();
+        c.position.set(ox, 0, oz);
+        this.root.add(c);
+        this.copies.push({ c, ox, oz });
+      }
+    }
+  }
+
+  // 매 프레임: 움직이는 것들을 카메라에서 가장 가까운 위치로, 먼 복제본은 숨긴다
+  updateView(cam, far = 60) {
+    if (!this.wrap) return;
+    for (const o of this.dyn.children) {
+      const h = o.userData.home;
+      if (!h) continue;
+      const d = this.wrapDelta(h.x - cam.x, h.z - cam.z);
+      o.position.x = cam.x + d.x;
+      o.position.z = cam.z + d.z;
+    }
+    const WS = this.W * this.S;
+    const HS = this.H * this.S;
+    for (const { c, ox, oz } of this.copies) {
+      const dx = Math.max(ox - cam.x, 0, cam.x - (ox + WS));
+      const dz = Math.max(oz - cam.z, 0, cam.z - (oz + HS));
+      c.visible = Math.hypot(dx, dz) < far;
+    }
+  }
+
+  // 순환 레벨에서 두 점 사이의 가장 짧은 차이 (순환하지 않으면 그대로)
+  wrapDelta(dx, dz) {
+    if (!this.wrap) return { x: dx, z: dz };
+    const WS = this.W * this.S;
+    const HS = this.H * this.S;
+    return { x: dx - WS * Math.round(dx / WS), z: dz - HS * Math.round(dz / HS) };
   }
 
   // ---------- 격자 기본 연산 ----------
   inBounds(x, y) {
     return x >= 0 && y >= 0 && x < this.W && y < this.H;
   }
+  // 이웃 칸. 순환 레벨은 반대편으로 이어지고, 아니면 맵 밖은 null
+  nb(x, y, d) {
+    const nx = x + DX[d];
+    const ny = y + DY[d];
+    if (this.wrap) return [(nx + this.W) % this.W, (ny + this.H) % this.H];
+    return this.inBounds(nx, ny) ? [nx, ny] : null;
+  }
+  _wrapCell(x, y) {
+    if (!this.wrap) return [x, y];
+    return [((x % this.W) + this.W) % this.W, ((y % this.H) + this.H) % this.H];
+  }
   _ref(x, y, d) {
     const W = this.W;
     const H = this.H;
-    if (d === 0) return x < W - 1 ? ['v', y * (W - 1) + x] : null;
-    if (d === 1) return x > 0 ? ['v', y * (W - 1) + x - 1] : null;
-    if (d === 2) return y < H - 1 ? ['h', y * W + x] : null;
-    return y > 0 ? ['h', (y - 1) * W + x] : null;
+    const wrap = this.wrap;
+    if (d === 0) return x < W - 1 || wrap ? ['v', y * W + x] : null;
+    if (d === 1) return x > 0 || wrap ? ['v', y * W + ((x - 1 + W) % W)] : null;
+    if (d === 2) return y < H - 1 || wrap ? ['h', y * W + x] : null;
+    return y > 0 || wrap ? ['h', ((y - 1 + H) % H) * W + x] : null;
   }
   getEdge(x, y, d) {
     const r = this._ref(x, y, d);
@@ -69,6 +131,7 @@ export class Level {
     if (r) this['p' + r[0]][r[1]] = 1;
   }
   cellAt(wx, wz) {
+    if (this.wrap) return this._wrapCell(Math.floor(wx / this.S), Math.floor(wz / this.S));
     const cx = Math.min(this.W - 1, Math.max(0, Math.floor(wx / this.S)));
     const cy = Math.min(this.H - 1, Math.max(0, Math.floor(wz / this.S)));
     return [cx, cy];
@@ -88,7 +151,7 @@ export class Level {
     return this.isWaterAt(x, z) ? 'water' : this.theme.surface;
   }
 
-  // pass(셀 번호)가 주어지면 그 조건을 만족하는 칸만 지난다 (익사체는 물속만)
+  // pass(셀 번호)가 주어지면 그 조건을 만족하는 칸만 지난다
   bfs(sx, sy, tx = -1, ty = -1, pass = null) {
     const W = this.W;
     const dist = new Int16Array(W * this.H).fill(-1);
@@ -102,7 +165,8 @@ export class Level {
       if (x === tx && y === ty) break;
       for (let d = 0; d < 4; d++) {
         if (this.getEdge(x, y, d) === WALL) continue;
-        const n = (y + DY[d]) * W + x + DX[d];
+        const [nx, ny] = this.nb(x, y, d);
+        const n = ny * W + nx;
         if (dist[n] >= 0 || (pass && !pass(n))) continue;
         dist[n] = dist[c] + 1;
         prev[n] = c;
@@ -139,11 +203,13 @@ export class Level {
   // 시야: 0.25m 간격으로 진행하며 넘는 벽을 검사. 문틀은 실제 틈 안으로 지나는지까지 본다.
   lineOfSight(x1, z1, x2, z2) {
     const S = this.S;
-    const dx = x2 - x1;
-    const dz = z2 - z1;
+    const wd = this.wrapDelta(x2 - x1, z2 - z1);
+    const dx = wd.x;
+    const dz = wd.z;
     const steps = Math.ceil(Math.hypot(dx, dz) / 0.25);
     let cx = Math.floor(x1 / S);
     let cy = Math.floor(z1 / S);
+    const edge = (x, y, d) => this.getEdge(...this._wrapCell(x, y), d);
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
       const nx = Math.floor((x1 + dx * t) / S);
@@ -153,7 +219,7 @@ export class Level {
       const oy = ny - cy;
       if (Math.abs(ox) + Math.abs(oy) === 1) {
         const d = ox === 1 ? 0 : ox === -1 ? 1 : oy === 1 ? 2 : 3;
-        const e = this.getEdge(cx, cy, d);
+        const e = edge(cx, cy, d);
         if (e === WALL) return false;
         if (e === DOOR) {
           const half = this.theme.doorW / 2 - 0.1;
@@ -170,8 +236,8 @@ export class Level {
       } else {
         const dX = ox > 0 ? 0 : 1;
         const dY = oy > 0 ? 2 : 3;
-        const a = this.getEdge(cx, cy, dX) !== WALL && this.getEdge(cx + ox, cy, dY) !== WALL;
-        const b = this.getEdge(cx, cy, dY) !== WALL && this.getEdge(cx, cy + oy, dX) !== WALL;
+        const a = edge(cx, cy, dX) !== WALL && edge(cx + ox, cy, dY) !== WALL;
+        const b = edge(cx, cy, dY) !== WALL && edge(cx, cy + oy, dX) !== WALL;
         if (!(a && b)) return false;
       }
       cx = nx;
@@ -182,14 +248,28 @@ export class Level {
 
   // ---------- 충돌 ----------
   _addCollider(minX, minZ, maxX, maxZ, soft = false) {
-    const c = { minX, minZ, maxX, maxZ, soft };
-    this.colliders.push(c);
+    this.colliders.push({ minX, minZ, maxX, maxZ, soft });
     const S = this.S;
-    const x0 = Math.max(0, Math.floor((minX - 0.6) / S));
-    const x1 = Math.min(this.W - 1, Math.floor((maxX + 0.6) / S));
-    const y0 = Math.max(0, Math.floor((minZ - 0.6) / S));
-    const y1 = Math.min(this.H - 1, Math.floor((maxZ + 0.6) / S));
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) this.cgrid[y * this.W + x].push(c);
+    const xs = [0];
+    const zs = [0];
+    if (this.wrap) {
+      const WS = this.W * S;
+      const HS = this.H * S;
+      if (minX < 1) xs.push(WS);
+      if (maxX > WS - 1) xs.push(-WS);
+      if (minZ < 1) zs.push(HS);
+      if (maxZ > HS - 1) zs.push(-HS);
+    }
+    for (const sx of xs) {
+      for (const sz of zs) {
+        const c = { minX: minX + sx, minZ: minZ + sz, maxX: maxX + sx, maxZ: maxZ + sz, soft };
+        const x0 = Math.max(0, Math.floor((c.minX - 0.6) / S));
+        const x1 = Math.min(this.W - 1, Math.floor((c.maxX + 0.6) / S));
+        const y0 = Math.max(0, Math.floor((c.minZ - 0.6) / S));
+        const y1 = Math.min(this.H - 1, Math.floor((c.maxZ + 0.6) / S));
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) this.cgrid[y * this.W + x].push(c);
+      }
+    }
   }
 
   hitsCollider(x, z, r) {
@@ -232,6 +312,13 @@ export class Level {
         }
       }
     }
+    if (this.wrap) {
+      const WS = this.W * this.S;
+      const HS = this.H * this.S;
+      pos.x = ((pos.x % WS) + WS) % WS;
+      pos.z = ((pos.z % HS) + HS) % HS;
+      return;
+    }
     pos.x = Math.max(r, Math.min(this.W * this.S - r, pos.x));
     pos.z = Math.max(r, Math.min(this.H * this.S - r, pos.z));
   }
@@ -251,9 +338,8 @@ export class Level {
       const [x, y] = stack[stack.length - 1];
       const opts = [];
       for (let d = 0; d < 4; d++) {
-        const nx = x + DX[d];
-        const ny = y + DY[d];
-        if (this.inBounds(nx, ny) && !vis[ny * W + nx]) opts.push(d);
+        const n = this.nb(x, y, d);
+        if (n && !vis[n[1] * W + n[0]]) opts.push(d);
       }
       if (!opts.length) {
         stack.pop();
@@ -261,8 +347,9 @@ export class Level {
       }
       const d = r.pick(opts);
       this.setEdge(x, y, d, r.chance(t.maze.doorChance) ? DOOR : OPEN);
-      vis[(y + DY[d]) * W + x + DX[d]] = 1;
-      stack.push([x + DX[d], y + DY[d]]);
+      const [nx, ny] = this.nb(x, y, d);
+      vis[ny * W + nx] = 1;
+      stack.push([nx, ny]);
     }
 
     // 2. 방: 내부 벽을 모두 터서 넓은 공간을 만든다. 교실 레벨은 둘레를 막고 문 1~2개만 남긴다.
@@ -298,9 +385,8 @@ export class Level {
         for (let y = y0; y < y0 + h; y++) {
           for (let x = x0; x < x0 + w; x++) {
             for (let d = 0; d < 4; d++) {
-              const nx = x + DX[d];
-              const ny = y + DY[d];
-              if (!this.inBounds(nx, ny) || this.roomOf[ny * W + nx] === id) continue;
+              const n = this.nb(x, y, d);
+              if (!n || this.roomOf[n[1] * W + n[0]] === id) continue;
               this.setEdge(x, y, d, WALL);
               this._protect(x, y, d);
               perim.push([x, y, d]);
@@ -321,6 +407,8 @@ export class Level {
       const arr = this[k];
       const prot = this['p' + k];
       for (let i = 0; i < arr.length; i++) {
+        // 순환하지 않는 레벨의 마지막 열·행 칸은 맵 밖으로 가는 벽이라 쓰지 않는다
+        if (!this.wrap && (k === 'v' ? i % W === W - 1 : i >= (H - 1) * W)) continue;
         if (arr[i] === WALL && !prot[i] && r.chance(t.maze.openChance)) {
           arr[i] = r.chance(t.maze.doorChance) ? DOOR : OPEN;
         }
@@ -340,9 +428,8 @@ export class Level {
         const x = i % W;
         const y = (i / W) | 0;
         for (let d = 0; d < 4; d++) {
-          const nx = x + DX[d];
-          const ny = y + DY[d];
-          if (this.inBounds(nx, ny) && dist[ny * W + nx] < 0 && this.getEdge(x, y, d) === WALL) edges.push([x, y, d]);
+          const n = this.nb(x, y, d);
+          if (n && dist[n[1] * W + n[0]] < 0 && this.getEdge(x, y, d) === WALL) edges.push([x, y, d]);
         }
       }
       if (!edges.length) break;
@@ -350,13 +437,15 @@ export class Level {
     }
 
     // 5. 기둥: 네 방향이 모두 뚫린 모서리에만
-    for (let j = 1; j < H; j++) {
-      for (let i = 1; i < W; i++) {
+    // 모서리 (i,j) 에서 만나는 네 벽: 왼쪽 위 칸의 오른쪽·아래쪽 벽, 오른쪽 아래 칸의 왼쪽·위쪽 벽
+    for (let j = this.wrap ? 0 : 1; j < H; j++) {
+      for (let i = this.wrap ? 0 : 1; i < W; i++) {
+        const [li, lj] = this._wrapCell(i - 1, j - 1);
         const open =
-          this.v[(j - 1) * (W - 1) + i - 1] === OPEN &&
-          this.v[j * (W - 1) + i - 1] === OPEN &&
-          this.h[(j - 1) * W + i - 1] === OPEN &&
-          this.h[(j - 1) * W + i] === OPEN;
+          this.getEdge(li, lj, 0) === OPEN &&
+          this.getEdge(li, lj, 2) === OPEN &&
+          this.getEdge(i, j, 1) === OPEN &&
+          this.getEdge(i, j, 3) === OPEN;
         if (open && r.chance(t.pillarChance)) this.pillars.push([i * this.S, j * this.S]);
       }
     }
@@ -424,17 +513,22 @@ export class Level {
         let sum = noise[i];
         let n = 1;
         for (let d = 0; d < 4; d++) {
-          const nx = x + DX[d];
-          const ny = y + DY[d];
-          if (!this.inBounds(nx, ny)) continue;
-          sum += noise[ny * W + nx];
+          const nn = this.nb(x, y, d);
+          if (!nn) continue;
+          sum += noise[nn[1] * W + nn[0]];
           n++;
         }
         this.water[i] = sum / n > cfg.threshold ? 1 : 0;
       }
     }
     const [sx, sy] = this.spawnCell;
-    for (let y = sy - 1; y <= sy + 1; y++) for (let x = sx - 1; x <= sx + 1; x++) if (this.inBounds(x, y)) this.water[y * W + x] = 0;
+    for (let y = sy - 1; y <= sy + 1; y++) {
+      for (let x = sx - 1; x <= sx + 1; x++) {
+        if (!this.wrap && !this.inBounds(x, y)) continue;
+        const [wx, wy] = this._wrapCell(x, y);
+        this.water[wy * W + wx] = 0;
+      }
+    }
 
     // 이어진 물 구역에 번호를 매긴다. 3칸보다 작은 웅덩이는 말려 버린다
     this._labelWater();
@@ -459,7 +553,8 @@ export class Level {
         const y = (c / W) | 0;
         for (let d = 0; d < 4; d++) {
           if (this.getEdge(x, y, d) === WALL) continue;
-          const nb = (y + DY[d]) * W + x + DX[d];
+          const [nx, ny] = this.nb(x, y, d);
+          const nb = ny * W + nx;
           if (!this.water[nb] || this.waterRegion[nb] >= 0) continue;
           this.waterRegion[nb] = region;
           q.push(nb);
@@ -502,13 +597,17 @@ export class Level {
         piece(alongZ, fixed, mid, dw, t.doorH, WH, false);
       }
     };
-    for (let y = 0; y < H; y++) for (let x = 0; x < W - 1; x++) edgeWall(true, (x + 1) * S, (y + 0.5) * S, this.v[y * (W - 1) + x]);
-    for (let y = 0; y < H - 1; y++) for (let x = 0; x < W; x++) edgeWall(false, (y + 1) * S, (x + 0.5) * S, this.h[y * W + x]);
+    const lastX = this.wrap ? W : W - 1;
+    const lastY = this.wrap ? H : H - 1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < lastX; x++) edgeWall(true, (x + 1) * S, (y + 0.5) * S, this.v[y * W + x]);
+    for (let y = 0; y < lastY; y++) for (let x = 0; x < W; x++) edgeWall(false, (y + 1) * S, (x + 0.5) * S, this.h[y * W + x]);
     // 바깥 경계
-    piece(true, 0, (H * S) / 2, H * S + T, yb, WH, true);
-    piece(true, W * S, (H * S) / 2, H * S + T, yb, WH, true);
-    piece(false, 0, (W * S) / 2, W * S + T, yb, WH, true);
-    piece(false, H * S, (W * S) / 2, W * S + T, yb, WH, true);
+    if (!this.wrap) {
+      piece(true, 0, (H * S) / 2, H * S + T, yb, WH, true);
+      piece(true, W * S, (H * S) / 2, H * S + T, yb, WH, true);
+      piece(false, 0, (W * S) / 2, W * S + T, yb, WH, true);
+      piece(false, H * S, (W * S) / 2, W * S + T, yb, WH, true);
+    }
     for (const [px, pz] of this.pillars) {
       wallG.push(box(0.6, WH - yb, 0.6, px, (WH + yb) / 2, pz, su, su));
       this._addCollider(px - 0.3, pz - 0.3, px + 0.3, pz + 0.3);
@@ -583,15 +682,22 @@ export class Level {
     const [ex, ey, ed] = this.exitFace;
     const ec = this.center(ex, ey);
     const off = S / 2 - T / 2;
-    const exit = makeExit(tex);
-    exit.group.position.set(ec.x + DX[ed] * off, 0, ec.z + DY[ed] * off);
+    // 'door' = 잠긴 비상구 (목표 아이템을 모아야 열린다) / 'light' = 빛이 새어 나오는 탈출로 (걸어 들어가면 끝)
+    const kind = t.exit || 'door';
+    const exit = kind === 'light' ? makeLightExit(tex) : makeExit(tex);
+    exit.group.position.set(ec.x + DX[ed] * off, this.groundAt(ec.x, ec.z), ec.z + DY[ed] * off);
     exit.group.rotation.y = Math.atan2(-DX[ed], -DY[ed]);
-    this.group.add(exit.group);
+    exit.group.userData.home = { x: exit.group.position.x, z: exit.group.position.z };
+    this.dyn.add(exit.group);
     this.exit = {
+      kind,
       x: ec.x + DX[ed] * (off - 0.6),
       z: ec.z + DY[ed] * (off - 0.6),
+      // 탈출로가 내는 소리의 위치 (벽면 바로 앞)
+      sx: ec.x + DX[ed] * (off - 0.2),
+      sz: ec.z + DY[ed] * (off - 0.2),
       obj: exit,
-      unlocked: false,
+      unlocked: !t.goal,
     };
 
     if (t.furniture === 'classroom') this._buildClassroom();
@@ -700,8 +806,11 @@ export class Level {
           const c = this.center(x, y);
           const g = new THREE.CircleGeometry(0.2, 20);
           g.rotateX(-Math.PI / 2);
-          g.translate(c.x + r.range(-1.2, 1.2), 0.004, c.z + r.range(-1.2, 1.2));
+          const dx = c.x + r.range(-1.2, 1.2);
+          const dz = c.z + r.range(-1.2, 1.2);
+          g.translate(dx, 0.004, dz);
           put('drain', g);
+          (this.drains ||= []).push({ x: dx, z: dz });
         }
       }
       // 사다리와 수심 표시
@@ -777,8 +886,8 @@ export class Level {
       for (const s of [-1, 1]) put('frame', edgeBox(alongZ, fixed, mid + s * (dw / 2 + 0.04), 0.08, T + 0.08, 0, dh + 0.06));
       put('frame', edgeBox(alongZ, fixed, mid, dw + 0.16, T + 0.08, dh, dh + 0.09));
     };
-    for (let y = 0; y < H; y++) for (let x = 0; x < W - 1; x++) if (this.v[y * (W - 1) + x] === DOOR) frame(true, (x + 1) * S, (y + 0.5) * S);
-    for (let y = 0; y < H - 1; y++) for (let x = 0; x < W; x++) if (this.h[y * W + x] === DOOR) frame(false, (y + 1) * S, (x + 0.5) * S);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (this.getEdge(x, y, 0) === DOOR && (this.wrap || x < W - 1)) frame(true, (x + 1) * S, (y + 0.5) * S);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (this.getEdge(x, y, 2) === DOOR && (this.wrap || y < H - 1)) frame(false, (y + 1) * S, (x + 0.5) * S);
 
     // 교실 둘레를 직접 훑는다 (연결성 보정으로 나중에 뚫린 문도 포함)
     const perim = [];
@@ -786,9 +895,8 @@ export class Level {
       for (let y = room.y0; y < room.y0 + room.h; y++) {
         for (let x = room.x0; x < room.x0 + room.w; x++) {
           for (let d = 0; d < 4; d++) {
-            const nx = x + DX[d];
-            const ny = y + DY[d];
-            if (!this.inBounds(nx, ny) || this.roomOf[ny * W + nx] === room.id) continue;
+            const n = this.nb(x, y, d);
+            if (!n || this.roomOf[n[1] * W + n[0]] === room.id) continue;
             if (this.getEdge(x, y, d) === DOOR) perim.push([x, y, d]);
           }
         }
@@ -945,10 +1053,9 @@ export class Level {
         quad(x, y, wet ? POOL_FLOOR : 0, wet ? basin : deck, t.uv.floor);
         // 오른쪽·아래 이웃과 물/마른 바닥이 갈리고 벽이 없으면 수영장 옆면과 턱
         for (const d of [0, 2]) {
-          const nx = x + DX[d];
-          const ny = y + DY[d];
-          if (!this.inBounds(nx, ny) || this.getEdge(x, y, d) === WALL) continue;
-          const nWet = this.water[ny * W + nx];
+          const n = this.nb(x, y, d);
+          if (!n || this.getEdge(x, y, d) === WALL) continue;
+          const nWet = this.water[n[1] * W + n[0]];
           if (nWet === wet) continue;
           const alongZ = d === 0;
           const ex = alongZ ? (x + 1) * S : (x + 0.5) * S;
@@ -1032,7 +1139,7 @@ export class Level {
       );
       m.renderOrder = 2;
       m.visible = false;
-      this.group.add(m);
+      this.dyn.add(m);
       this.ripples.push({ m, life: 1, max: 1, size: 1, strength: 0 });
     }
   }
@@ -1244,18 +1351,22 @@ export class Level {
       const ground = this.groundAt(p.x, p.z);
       const iy = ground + 0.25;
       mesh.position.set(p.x, iy, p.z);
-      this.group.add(mesh);
+      mesh.userData.home = { x: p.x, z: p.z };
+      this.dyn.add(mesh);
       // 바닥에 떨어진 둥근 그림자
       const shadow = new THREE.Mesh(this._shadowGeo, this._shadowMat);
       shadow.position.set(p.x, ground + 0.006, p.z);
-      this.group.add(shadow);
+      shadow.userData.home = { x: p.x, z: p.z };
+      this.dyn.add(shadow);
       this.items.push({ type, mesh, shadow, x: p.x, z: p.z, y: iy, taken: false, phase: r.next() * 10 });
       return true;
     };
 
-    const goalCells = pick(t.goal.count + 2, Math.floor(this.maxDist * 0.35), Math.max(3, Math.floor(W / 4)));
     let placed = 0;
-    for (const c of goalCells) if (placed < t.goal.count && spawnItem(t.goal.item, c)) placed++;
+    if (t.goal) {
+      const goalCells = pick(t.goal.count + 2, Math.floor(this.maxDist * 0.35), Math.max(3, Math.floor(W / 4)));
+      for (const c of goalCells) if (placed < t.goal.count && spawnItem(t.goal.item, c)) placed++;
+    }
     this.goalTotal = placed;
     for (const c of pick(t.pickups.battery, 2, 3)) spawnItem('battery', c);
     for (const c of pick(t.pickups.water, 2, 3)) spawnItem('water', c);
@@ -1287,7 +1398,8 @@ export class Level {
       mesh.position.set(px, 1.45, pz);
       mesh.rotation.y = Math.atan2(-DX[d], -DY[d]);
       mesh.rotation.z = r.range(-0.12, 0.12);
-      this.group.add(mesh);
+      mesh.userData.home = { x: px, z: pz };
+      this.dyn.add(mesh);
       this.items.push({ type: 'note', mesh, x: px, z: pz, y: 1.45, taken: false, text });
     }
   }
@@ -1335,7 +1447,7 @@ export class Level {
   }
 
   dispose() {
-    this.group.traverse((o) => {
+    this.root.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) o.material.dispose();
     });

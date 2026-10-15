@@ -4,7 +4,7 @@ import { Level, WALL } from './level.js';
 import { Player } from './player.js';
 import { Hound } from './entities/hound.js';
 import { Doll } from './entities/doll.js';
-import { Drowned } from './entities/drowned.js';
+import { Nothing } from './entities/none.js';
 import { LightRig } from './lights.js';
 import { AudioEngine } from './audio.js';
 import { VHS } from './vhs.js';
@@ -30,7 +30,7 @@ const vhs = new VHS(renderer);
 const lights = new LightRig(scene);
 const player = new Player(camera);
 // 레벨마다 다른 엔티티. 테마의 entity.kind 로 고른다
-const entities = { hound: new Hound(tex), doll: new Doll(tex), drowned: new Drowned(tex) };
+const entities = { hound: new Hound(tex), doll: new Doll(tex), none: new Nothing() };
 for (const e of Object.values(entities)) scene.add(e.mesh);
 let entity = entities.hound;
 const hud = new HUD();
@@ -90,13 +90,13 @@ const DXY = [
 // ---------- 레벨 ----------
 function loadLevel(index, seed) {
   if (game.level) {
-    scene.remove(game.level.group);
+    scene.remove(game.level.root);
     game.level.dispose();
   }
   const theme = LEVELS[index];
   const level = new Level(theme, seed, tex);
   Object.assign(game, { level, levelIndex: index, seed, have: 0 });
-  scene.add(level.group);
+  scene.add(level.root);
   scene.fog = new THREE.Fog(theme.fog.color, theme.fog.near, theme.fog.far);
   scene.background = new THREE.Color(theme.fog.color);
   lights.setLevel(level);
@@ -120,6 +120,7 @@ function loadLevel(index, seed) {
     audio.setTheme(theme);
     audio.setEntityKind(theme.entity.kind);
     audio.attachEntity(entity.audioAnchor);
+    audio.setLevel(level);
   }
   updateObjective();
   if (TEST) window.__noclip.level = level;
@@ -128,7 +129,8 @@ function loadLevel(index, seed) {
 function updateObjective() {
   const lv = game.level;
   const g = lv.theme.goal;
-  game.objective = lv.exit.unlocked ? '비상구로 가라' : `${g.name} ${game.have}/${lv.goalTotal}`;
+  if (!g) game.objective = '탈출로를 찾아라';
+  else game.objective = lv.exit.unlocked ? '비상구로 가라' : `${g.name} ${game.have}/${lv.goalTotal}`;
 }
 
 // ---------- 상태 ----------
@@ -163,7 +165,10 @@ function ensureAudio() {
     audio.setEntityKind(entity.cfg.kind);
     audio.attachEntity(entity.audioAnchor);
     audio.setVolume(settings.volume);
-    if (game.level) audio.setTheme(game.level.theme);
+    if (game.level) {
+      audio.setTheme(game.level.theme);
+      audio.setLevel(game.level);
+    }
   }
   audio.resume();
 }
@@ -226,6 +231,7 @@ function toTitle() {
     audio.setStatic(0);
     audio.setEntityMood(false, false);
     audio.setBreath(0);
+    audio.stopScape();
   }
   loadLevel(0, 1996);
   setState('title');
@@ -242,9 +248,10 @@ function findTarget() {
   let bestScore = Infinity;
   for (const it of lv.items) {
     if (it.taken) continue;
-    const dx = it.x - cp.x;
+    const w = lv.wrapDelta(it.x - cp.x, it.z - cp.z);
+    const dx = w.x;
     const dy = it.mesh.position.y - cp.y;
-    const dz = it.z - cp.z;
+    const dz = w.z;
     const d = Math.hypot(dx, dy, dz);
     // 거리는 수평으로 잰다. 물속 바닥에 가라앉은 것도 물가에서 손을 뻗어 주울 수 있게
     const hd = Math.hypot(dx, dz);
@@ -258,8 +265,9 @@ function findTarget() {
     }
   }
   const ex = lv.exit;
-  const de = Math.hypot(ex.x - cp.x, ex.z - cp.z);
-  if (de < 1.7 && de < bestScore) best = { kind: 'exit' };
+  const we = lv.wrapDelta(ex.x - cp.x, ex.z - cp.z);
+  const de = Math.hypot(we.x, we.z);
+  if (ex.kind === 'door' && de < 1.7 && de < bestScore) best = { kind: 'exit' };
   return best;
 }
 
@@ -325,7 +333,10 @@ function exitLevel() {
   recordClear(progress, game.levelIndex, game.levelT, LEVELS.length);
   setState('transition');
   game.transT = 0;
-  audio.setStatic(0.5, 0.4);
+  // 빛 속으로 걸어 들어가면 하얗게, 문을 열고 나가면 까맣게 사라진다
+  game.transWhite = game.level.exit.kind === 'light';
+  if (game.transWhite) audio.enterLight();
+  else audio.setStatic(0.5, 0.4);
   player.keys = {};
 }
 
@@ -378,6 +389,7 @@ function update(dt) {
   }
 
   player.lit = lights.update(dt, game.time, camera.position, entity);
+  audio.update(dt, { cam: camera.position, lights, player });
 
   if (s === 'caught') updateCaught(dt);
   else {
@@ -431,12 +443,24 @@ function update(dt) {
   if (s === 'playing') {
     game.target = findTarget();
     hud.prompt(promptFor(game.target));
+    // 빛이 새어 나오는 탈출로는 걸어 들어가기만 하면 된다
+    const ex = lv.exit;
+    if (ex.kind === 'light') {
+      const w = lv.wrapDelta(ex.x - player.pos.x, ex.z - player.pos.z);
+      if (Math.hypot(w.x, w.z) < 0.85) exitLevel();
+    }
   } else hud.prompt('');
 
   if (s === 'transition') {
     game.transT += dt;
-    game.fade = Math.max(0, 1 - game.transT / 1.4);
-    if (game.transT > 1.8) {
+    if (game.transWhite) {
+      // 빛 속으로: 앞으로 천천히 끌려 들어가며 화면이 하얗게 탄다
+      vhs.uniforms.white.value = Math.min(1, game.transT / 2.4);
+      player.pos.x -= Math.sin(player.yaw) * dt * 0.6;
+      player.pos.z -= Math.cos(player.yaw) * dt * 0.6;
+    } else game.fade = Math.max(0, 1 - game.transT / 1.4);
+    if (game.transT > (game.transWhite ? 3.2 : 1.8)) {
+      vhs.uniforms.white.value = 0;
       const next = game.levelIndex + 1;
       if (next < LEVELS.length) {
         loadLevel(next, randomSeed());
@@ -540,6 +564,7 @@ function endGame() {
 }
 
 function render() {
+  if (game.level) game.level.updateView(camera.position, (scene.fog ? scene.fog.far : 60) + 8);
   vhs.render(scene, camera);
 }
 
@@ -653,6 +678,9 @@ if (TEST) {
     entities,
     get entity() {
       return entity;
+    },
+    get audio() {
+      return audio;
     },
     lights,
     startGame,

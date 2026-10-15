@@ -10,6 +10,7 @@ uniform float glitch;
 uniform float fade;
 uniform float exposure;
 uniform float stress;
+uniform float white;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -65,6 +66,7 @@ void main() {
   float vig = smoothstep(0.82, 0.22, length(cc * vec2(1.0, 1.2)));
   col *= mix(0.5, 1.0, vig);
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = vec3(0.0);
+  col = mix(col, vec3(1.0, 0.98, 0.94), white);
   gl_FragColor = vec4(col * fade, 1.0);
 }
 `;
@@ -86,6 +88,7 @@ export class VHS {
       fade: { value: 1 },
       exposure: { value: 1 },
       stress: { value: 0 },
+      white: { value: 0 },
     };
     const mat = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: vert, fragmentShader: frag, depthTest: false });
     this.scene = new THREE.Scene();

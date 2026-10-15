@@ -51,7 +51,7 @@ export class EntityBase {
     return this.state === CHASE;
   }
 
-  // 지날 수 있는 칸 조건. 기본은 어디든, 익사체는 물속만
+  // 지날 수 있는 칸 조건. 기본은 어디든 (특정 칸만 다니는 엔티티가 덮어쓴다)
   passable() {
     return null;
   }
