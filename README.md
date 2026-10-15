@@ -2,7 +2,7 @@
 
 > 1996년 10월 15일 새벽 3시 14분. 녹화 버튼은 아직 눌려 있다.
 
-![기둥이 늘어선 노란 방](screenshots/lobby-01-rooms.png)
+![기둥이 늘어선 노란 방](screenshots/lobby-01-rooms.jpg)
 
 ### [▶ 브라우저에서 바로 플레이](https://noclip-swart.vercel.app)
 
@@ -43,18 +43,18 @@
 
 | | |
 |---|---|
-| ![하운드](screenshots/hound-01-close.png) | ![잠긴 비상구](screenshots/lobby-02-exit.png) |
+| ![하운드](screenshots/hound-01-close.jpg) | ![잠긴 비상구](screenshots/lobby-02-exit.jpg) |
 | 로비를 걸어 다니는 하운드 | 전원이 끊긴 비상구 |
-| ![교실](screenshots/level1-02-classroom.png) | ![칠판](screenshots/level1-03-chalkboard.png) |
+| ![교실](screenshots/level1-02-classroom.jpg) | ![칠판](screenshots/level1-03-chalkboard.jpg) |
 | 아무도 없는 교실 | 칠판에 남은 낙서 |
-| ![지켜보는 중](screenshots/doll-05-watched.png) | ![돌아봤을 때](screenshots/doll-06-turned-back.png) |
+| ![지켜보는 중](screenshots/doll-05-watched.jpg) | ![돌아봤을 때](screenshots/doll-06-turned-back.jpg) |
 | 손전등을 비추는 동안 인형은 움직이지 않는다 | 잠깐 눈을 뗐다가 돌아보면 |
 
 ## 특징
 
 - **매번 다른 맵**: 들어갈 때마다 구조가 바뀝니다. 같은 길은 두 번 없습니다.
 - **1996년 캠코더**: REC 표시, 날짜, 테이프 노이즈. 손전등 배터리와 신호 막대(정신력)를 살피며 버텨야 합니다.
-- **소리가 곧 위치**: 뛰면 멀리까지 들립니다. 웅크리면 느리지만 조용합니다.
+- **소리가 곧 위치**: 뛰면 멀리까지 들립니다. 웅크리면 느리지만 조용합니다. 화면 왼쪽 아래 AUDIO 미터로 지금 얼마나 시끄러운지 확인할 수 있습니다.
 - **마이크 모드 (선택)**: 실제로 소리를 내면 게임 속 그것들이 듣습니다.
 - **쪽지**: 먼저 들어온 사람들이 벽에 남긴 기록입니다. 살아남는 방법이 적혀 있을지도 모릅니다.
 
@@ -75,6 +75,7 @@
 - 데스크톱 Chrome · Edge · Firefox에서 플레이할 수 있습니다. 모바일은 지원하지 않습니다.
 - 헤드폰을 권장합니다. 소리로 그것들의 위치를 알아내야 하는 게임입니다.
 - 화면 깜빡임과 갑작스러운 큰 소리가 있습니다.
+- 화면이 너무 어둡거나 밝으면 타이틀이나 일시정지 화면에서 밝기를 조절하세요. 음량과 마우스 감도도 같은 곳에서 바꿀 수 있습니다.
 
 ---
 

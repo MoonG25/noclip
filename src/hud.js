@@ -24,8 +24,8 @@ export class HUD {
       objective: $('objective'),
       prompt: $('prompt'),
       message: $('message'),
-      mic: $('mic-meter'),
-      micFill: $('mic-fill'),
+      segs: [...document.querySelectorAll('#audio-meter i')],
+      micTag: $('mic-tag'),
       note: $('note'),
       noteText: $('note-text'),
       tc: $('titlecard'),
@@ -69,11 +69,12 @@ export class HUD {
     this._set('level', e.level, s.levelCode);
     this._set('obj', e.objective, s.objective);
 
-    if (s.mic != null) {
-      e.mic.classList.remove('hidden');
-      e.micFill.style.width = `${Math.min(1, s.mic) * 100}%`;
-      e.mic.classList.toggle('loud', s.mic > 0.6);
-    } else e.mic.classList.add('hidden');
+    const lit = Math.ceil(Math.min(1, s.noise) * e.segs.length - 0.001);
+    if (lit !== this._lit) {
+      this._lit = lit;
+      e.segs.forEach((el, i) => el.classList.toggle('on', i < lit));
+    }
+    e.micTag.classList.toggle('hidden', !s.micOn);
 
     if (this.msgT > 0) {
       this.msgT -= dt;

@@ -55,6 +55,10 @@ export class AudioEngine {
     if (this.ctx.state !== 'running') this.ctx.resume();
   }
 
+  setVolume(v) {
+    this.master.gain.setTargetAtTime(0.9 * v, this.ctx.currentTime, 0.05);
+  }
+
   _loop(buf) {
     const s = this.ctx.createBufferSource();
     s.buffer = buf;

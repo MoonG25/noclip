@@ -4,7 +4,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NOCLIP</title>
-    <link rel="icon" href="data:," />
+    <meta name="description" content="1996년 10월 15일, 폐교 지하에서 발견된 마지막 테이프. 소리로 사냥하는 하운드와 눈을 떼면 다가오는 인형을 피해 끝없는 백룸을 빠져나가세요. 브라우저에서 바로 플레이." />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <!-- 링크 공유 미리보기 -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="NOCLIP" />
+    <meta property="og:title" content="NOCLIP · 브라우저 백룸 공포게임" />
+    <meta property="og:description" content="1996년 10월 15일, 폐교 지하에서 발견된 마지막 테이프. 소리로 사냥하는 하운드와 눈을 떼면 다가오는 인형을 피해 끝없는 백룸을 빠져나가세요. 브라우저에서 바로 플레이." />
+    <meta property="og:url" content="https://noclip-swart.vercel.app/" />
+    <meta property="og:image" content="https://noclip-swart.vercel.app/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NOCLIP · 브라우저 백룸 공포게임" />
+    <meta name="twitter:description" content="1996년 10월 15일, 폐교 지하에서 발견된 마지막 테이프. 소리로 사냥하는 하운드와 눈을 떼면 다가오는 인형을 피해 끝없는 백룸을 빠져나가세요. 브라우저에서 바로 플레이." />
+    <meta name="twitter:image" content="https://noclip-swart.vercel.app/og.jpg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet" />
@@ -43,7 +59,8 @@
       <div id="stamina"><div id="stamina-fill"></div></div>
       <div id="prompt"></div>
       <div id="message"></div>
-      <div id="mic-meter" class="hidden"><span>MIC</span><div><div id="mic-fill"></div></div></div>
+      <!-- 캠코더 오디오 레벨: 지금 내가 내는 소리의 크기 -->
+      <div id="audio-meter"><span>AUDIO</span><div class="segs"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><em id="mic-tag" class="hidden">● MIC</em></div>
     </div>
 
     <div id="note" class="hidden">
@@ -78,8 +95,13 @@
         </div>
         <div class="options">
           <label><input type="checkbox" id="opt-mic" /> 마이크 사용 — 실제로 소리를 내면 그것이 듣는다</label>
-          <label>마우스 감도 <input type="range" id="opt-sens" min="0.4" max="2.5" step="0.1" value="1" /></label>
         </div>
+        <div class="settings">
+          <label><span>마우스 감도</span><input type="range" data-setting="sens" min="0.4" max="2.5" step="0.1" /></label>
+          <label><span>음량</span><input type="range" data-setting="volume" min="0" max="1" step="0.05" /></label>
+          <label><span>밝기</span><input type="range" data-setting="bright" min="0.6" max="1.8" step="0.05" /></label>
+        </div>
+        <p id="mobile-warn" class="mobile-warn hidden">이 게임은 키보드와 마우스가 필요합니다. 데스크톱 브라우저에서 플레이해 주세요.</p>
         <button id="btn-start" class="btn">● 녹화 시작</button>
         <p class="warn">헤드폰 권장 · 화면 깜빡임과 갑작스러운 큰 소리가 있습니다</p>
       </div>
@@ -89,6 +111,11 @@
       <div class="panel">
         <h2>❚❚ PAUSE</h2>
         <p class="sub">클릭하면 녹화를 이어갑니다</p>
+        <div class="settings">
+          <label><span>마우스 감도</span><input type="range" data-setting="sens" min="0.4" max="2.5" step="0.1" /></label>
+          <label><span>음량</span><input type="range" data-setting="volume" min="0" max="1" step="0.05" /></label>
+          <label><span>밝기</span><input type="range" data-setting="bright" min="0.6" max="1.8" step="0.05" /></label>
+        </div>
         <button id="btn-resume" class="btn">▶ 계속</button>
         <button id="btn-quit" class="btn ghost">■ 타이틀로</button>
       </div>

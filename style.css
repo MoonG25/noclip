@@ -236,27 +236,35 @@ body {
   transition: opacity 0.6s;
 }
 
-#mic-meter {
+#audio-meter {
   position: absolute;
   bottom: 13vh;
   left: 5vw;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   font-size: 0.6em;
 }
-#mic-meter > div {
-  width: 80px;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.15);
+#audio-meter .segs {
+  display: flex;
+  gap: 3px;
 }
-#mic-fill {
-  height: 100%;
-  width: 0;
+#audio-meter i {
+  display: block;
+  width: 7px;
+  height: 0.75em;
+  background: rgba(255, 255, 255, 0.14);
+}
+#audio-meter i.on {
   background: var(--fg);
 }
-#mic-meter.loud #mic-fill {
+#audio-meter i:nth-child(n + 10).on {
   background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+}
+#mic-tag {
+  font-style: normal;
+  color: var(--red);
 }
 
 /* ---------- 쪽지 ---------- */
@@ -411,6 +419,37 @@ body {
   gap: 8px;
   align-items: center;
   cursor: pointer;
+}
+.settings {
+  display: grid;
+  gap: 8px;
+  justify-content: center;
+  margin: 0 0 22px;
+  font-family: var(--ko);
+  font-size: 13px;
+  color: var(--dim);
+}
+.settings label {
+  display: grid;
+  grid-template-columns: 80px 180px;
+  align-items: center;
+  text-align: left;
+}
+.settings input {
+  width: 100%;
+}
+.settings input,
+.options input {
+  accent-color: var(--fg);
+}
+.mobile-warn {
+  margin: 0 auto 18px;
+  max-width: 420px;
+  padding: 10px 14px;
+  border: 1px solid var(--red);
+  font-family: var(--ko);
+  font-size: 14px;
+  color: #ffb3ad;
 }
 .btn {
   display: inline-block;

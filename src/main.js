@@ -48,14 +48,24 @@ const game = {
   transT: 0,
   sanityT: 0,
   micT: 0,
-  sens: 1,
+  noise: 0,
   target: null,
 };
 
+// 설정: 감도·음량·밝기. 타이틀과 일시정지 화면의 슬라이더가 같은 값을 공유한다
+const SETTINGS_KEY = 'noclip.settings';
+const settings = { sens: 1, volume: 0.8, bright: 1 };
 try {
-  game.sens = Number(localStorage.getItem('noclip.sens')) || 1;
+  const old = Number(localStorage.getItem('noclip.sens'));
+  if (old) settings.sens = old;
+  Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'));
 } catch {}
-$('opt-sens').value = game.sens;
+
+function applySettings() {
+  if (audio) audio.setVolume(settings.volume);
+  if (game.level) vhs.uniforms.exposure.value = game.level.theme.exposure * settings.bright;
+  for (const el of document.querySelectorAll('[data-setting]')) el.value = settings[el.dataset.setting];
+}
 
 const ITEM_LABEL = {
   fuse: '퓨즈 줍기',
@@ -84,7 +94,7 @@ function loadLevel(index, seed) {
   scene.fog = new THREE.Fog(theme.fog.color, theme.fog.near, theme.fog.far);
   scene.background = new THREE.Color(theme.fog.color);
   lights.setLevel(level);
-  vhs.uniforms.exposure.value = theme.exposure;
+  vhs.uniforms.exposure.value = theme.exposure * settings.bright;
 
   const [sx, sy] = level.spawnCell;
   const c = level.center(sx, sy);
@@ -146,6 +156,7 @@ function ensureAudio() {
     audio = new AudioEngine(camera);
     audio.setEntityKind(entity.cfg.kind);
     audio.attachEntity(entity.audioAnchor);
+    audio.setVolume(settings.volume);
     if (game.level) audio.setTheme(game.level.theme);
   }
   audio.resume();
@@ -333,7 +344,10 @@ function update(dt) {
   game.fade = Math.min(1, game.fade + dt * 0.8);
 
   const { steps } = player.update(dt, lv, game.time);
+  // 오디오 레벨 미터: 발소리·마이크 소리가 튀었다가 서서히 가라앉는다
+  game.noise = Math.max(0, game.noise - dt * 1.2);
   for (const loud of steps) {
+    game.noise = Math.max(game.noise, loud);
     audio.footstep(lv.theme.surface, loud);
     entity.hear(player.pos.x, player.pos.z, loud * 17, lv);
   }
@@ -381,6 +395,7 @@ function update(dt) {
   let mic = null;
   if (audio.mic) {
     mic = Math.max(0, Math.min(1, (audio.micLevel() - 0.015) / 0.12));
+    game.noise = Math.max(game.noise, mic);
     game.micT -= dt;
     if (mic > 0.35 && game.micT <= 0 && s === 'playing') {
       game.micT = 0.4;
@@ -428,7 +443,8 @@ function update(dt) {
     exhausted: player.exhausted,
     levelCode: lv.theme.code,
     objective: game.objective,
-    mic,
+    noise: game.noise,
+    micOn: !!audio.mic,
   });
 }
 
@@ -528,7 +544,7 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('mousemove', (e) => {
   if (game.state !== 'playing') return;
   if (!TEST && !document.pointerLockElement) return;
-  player.look(e.movementX, e.movementY, 0.0022 * game.sens);
+  player.look(e.movementX, e.movementY, 0.0022 * settings.sens);
 });
 canvas.addEventListener('click', () => {
   if (game.state === 'playing' && !document.pointerLockElement) lockPointer();
@@ -562,12 +578,19 @@ $('btn-again').addEventListener('click', toTitle);
 $('screen-pause').addEventListener('click', (e) => {
   if (e.target.id === 'screen-pause') resume();
 });
-$('opt-sens').addEventListener('input', (e) => {
-  game.sens = Number(e.target.value);
-  try {
-    localStorage.setItem('noclip.sens', String(game.sens));
-  } catch {}
-});
+for (const el of document.querySelectorAll('[data-setting]')) {
+  el.addEventListener('input', () => {
+    settings[el.dataset.setting] = Number(el.value);
+    applySettings();
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {}
+  });
+}
+// 터치 전용 기기에서는 플레이할 수 없다고 미리 알려준다
+if (matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) {
+  $('mobile-warn').classList.remove('hidden');
+}
 $('opt-mic').addEventListener('change', async (e) => {
   if (!e.target.checked) return;
   ensureAudio();
@@ -598,6 +621,7 @@ if (TEST) {
 }
 resize();
 loadLevel(0, 1996);
+applySettings();
 showScreen('screen-title');
 requestAnimationFrame(frame);
 window.__booted = true;
