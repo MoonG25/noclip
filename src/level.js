@@ -554,6 +554,31 @@ export class Level {
     this.panelMesh = add(panels, panelMat);
     this.panelColor = new THREE.Color(t.lights.panel);
 
+    // 모든 형광등 아래 바닥에 빛이 고인다 (가까운 8개만 진짜 광원이라 먼 바닥이 어두워지는 것을 보완)
+    const lc = new THREE.Color(t.lights.color);
+    const pools = [];
+    for (const f of this.fixtures) {
+      const g = new THREE.PlaneGeometry(3.6, 3.6);
+      g.rotateX(-Math.PI / 2);
+      g.translate(f.x, this.groundAt(f.x, f.z) + 0.006, f.z);
+      const a = f.state === 0 ? 0 : 1;
+      g.setAttribute('color', new THREE.Float32BufferAttribute([0, 1, 2, 3].flatMap(() => [lc.r, lc.g, lc.b, a]), 4));
+      pools.push(g);
+    }
+    this.lightPool = add(
+      pools,
+      new THREE.MeshBasicMaterial({
+        map: tex.glow,
+        vertexColors: true,
+        transparent: true,
+        opacity: t.lights.pool ?? 0.14,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      }),
+    );
+
     // 출구
     const [ex, ey, ed] = this.exitFace;
     const ec = this.center(ex, ey);
@@ -574,6 +599,223 @@ export class Level {
 
     add(wallG, wallMat);
     this._placeItems();
+    this._buildDetails();
+  }
+
+  // ---------- 소품 ----------
+  // 벽·천장·바닥에 드문드문 놓는 작은 것들. 같은 재질끼리 합쳐서 그리기 부담을 줄인다
+  _buildDetails() {
+    const t = this.theme;
+    const r = this.rng;
+    const tex = this.tex;
+    const S = this.S;
+    const WH = this.wallH;
+    const W = this.W;
+    const H = this.H;
+    const lists = new Map();
+    const put = (key, geo) => {
+      if (!lists.has(key)) lists.set(key, []);
+      lists.get(key).push(geo);
+    };
+    // 셀 (x,y) 의 d 방향 벽면 위 한 점. s: 벽을 따라 옮김, off: 벽에서 띄우는 거리
+    const onWall = (x, y, d, s, off) => {
+      const c = this.center(x, y);
+      const k = S / 2 - T / 2 - off;
+      return {
+        x: c.x + DX[d] * k + (d < 2 ? 0 : s),
+        z: c.z + DY[d] * k + (d < 2 ? s : 0),
+        ry: Math.atan2(-DX[d], -DY[d]),
+      };
+    };
+    const place = (geo, p, y) => geo.rotateY(p.ry).translate(p.x, y, p.z);
+    const tube = (a, b, rad) => {
+      const dir = new THREE.Vector3().subVectors(b, a);
+      const g = new THREE.CylinderGeometry(rad, rad, dir.length(), 8);
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize()));
+      return g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    };
+    const faces = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (this.water[y * W + x]) continue;
+        for (let d = 0; d < 4; d++) {
+          if (this.getEdge(x, y, d) === WALL && !this.reserved.has(`${x},${y},${d}`)) faces.push([x, y, d]);
+        }
+      }
+    }
+    r.shuffle(faces);
+
+    // 콘센트 (로비·교실)
+    const outlet = (f) => {
+      const s = r.range(-1.3, 1.3);
+      put('white', place(new THREE.BoxGeometry(0.075, 0.115, 0.012), onWall(...f, s, 0.006), 0.3));
+      // 판 앞면에 살짝 튀어나온 콘센트 구멍 두 개
+      for (const dy of [0.018, -0.018]) put('dark', place(new THREE.BoxGeometry(0.03, 0.014, 0.004), onWall(...f, s, 0.0135), 0.3 + dy));
+    };
+    // 천장 환기구 (조명 패널을 피해 한쪽으로 비켜 둔다)
+    const ventAt = (x, y) => {
+      const c = this.center(x, y);
+      const k = r.int(0, 3);
+      const g = new THREE.PlaneGeometry(0.55, 0.55);
+      g.rotateX(Math.PI / 2);
+      g.translate(c.x + DX[k] * 1.25, WH - 0.006, c.z + DY[k] * 1.25);
+      put('vent', g);
+    };
+
+    if (t.id === 'lobby' || t.id === 'classrooms') {
+      const n = Math.floor(faces.length * (t.id === 'lobby' ? 0.18 : 0.1));
+      for (const f of faces.slice(0, n)) outlet(f);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (r.chance(0.16)) ventAt(x, y);
+    }
+
+    if (t.id === 'classrooms') {
+      // 복도 게시판
+      let boards = 0;
+      for (const f of faces.slice(Math.floor(faces.length * 0.1))) {
+        if (boards >= 14 || this.roomOf[f[1] * W + f[0]] >= 0 || !r.chance(0.3)) continue;
+        const p = onWall(...f, r.range(-0.8, 0.8), 0.012);
+        put('cork', place(new THREE.BoxGeometry(1.35, 0.9, 0.024), p, 1.5));
+        this.reserved.add(f.join(','));
+        boards++;
+      }
+      // 칠판 위 시계
+      for (const b of this.boardSpots || []) {
+        const ry = Math.atan2(b.nx, b.nz);
+        const y = Math.min(WH - 0.28, b.top + 0.32);
+        const face = new THREE.CircleGeometry(0.22, 28);
+        face.rotateY(ry).translate(b.x + b.nx * 0.052, y, b.z + b.nz * 0.052);
+        put('clock', face);
+        const rim = new THREE.CylinderGeometry(0.245, 0.245, 0.05, 28, 1, true);
+        rim.rotateX(Math.PI / 2).rotateY(ry).translate(b.x + b.nx * 0.026, y, b.z + b.nz * 0.026);
+        put('rim', rim);
+      }
+      this._buildClassDoors(put);
+    }
+
+    if (t.id === 'poolrooms') {
+      // 데크 배수구
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          if (this.water[y * W + x] || !r.chance(0.16)) continue;
+          const c = this.center(x, y);
+          const g = new THREE.CircleGeometry(0.2, 20);
+          g.rotateX(-Math.PI / 2);
+          g.translate(c.x + r.range(-1.2, 1.2), 0.004, c.z + r.range(-1.2, 1.2));
+          put('drain', g);
+        }
+      }
+      // 사다리와 수심 표시
+      for (const e of this.poolEdges || []) {
+        const roll = r.next();
+        if (roll > 0.26) continue;
+        const s = r.range(-1.1, 1.1);
+        const at = (along, perp, y) =>
+          e.alongZ ? new THREE.Vector3(e.ex + perp, y, e.ez + along) : new THREE.Vector3(e.ex + along, y, e.ez + perp);
+        if (roll < 0.14) {
+          const wet = -e.dry * 0.16;
+          const deck = e.dry * 0.28;
+          for (const a of [s - 0.24, s + 0.24]) {
+            put('chrome', tube(at(a, wet, POOL_FLOOR + 0.05), at(a, wet, 0.82), 0.022));
+            put('chrome', tube(at(a, wet, 0.82), at(a, deck, 0.82), 0.022));
+            put('chrome', tube(at(a, deck, 0.82), at(a, deck, 0.05), 0.022));
+          }
+          for (const y of [-0.22, -0.5, -0.78]) put('chrome', tube(at(s - 0.24, wet, y), at(s + 0.24, wet, y), 0.016));
+        } else {
+          const g = new THREE.PlaneGeometry(0.75, 0.28);
+          g.rotateX(-Math.PI / 2);
+          const w = at(0, -e.dry, 0).sub(at(0, 0, 0));
+          g.rotateY(Math.atan2(-w.x, -w.z));
+          const p = at(s, e.dry * 0.62, 0.005);
+          g.translate(p.x, p.y, p.z);
+          put('depth', g);
+        }
+      }
+    }
+
+    const mats = {
+      white: () => new THREE.MeshLambertMaterial({ color: 0xe6e2d6 }),
+      dark: () => new THREE.MeshBasicMaterial({ color: 0x15130f }),
+      vent: () => new THREE.MeshLambertMaterial({ map: tex.vent }),
+      cork: () => new THREE.MeshLambertMaterial({ map: tex.corkboard }),
+      clock: () => new THREE.MeshLambertMaterial({ map: tex.clock }),
+      rim: () => new THREE.MeshLambertMaterial({ color: 0x2b2a28, side: THREE.DoubleSide }),
+      frame: () => new THREE.MeshLambertMaterial({ color: 0x4f3b26 }),
+      door: () => new THREE.MeshLambertMaterial({ map: tex.classDoor }),
+      plate: () => new THREE.MeshLambertMaterial({ map: tex.classPlate }),
+      chrome: () => new THREE.MeshPhongMaterial({ color: 0xc9d0d3, specular: 0xffffff, shininess: 90 }),
+      drain: () => new THREE.MeshLambertMaterial({ map: tex.drain, transparent: true, alphaTest: 0.5 }),
+      depth: () =>
+        new THREE.MeshLambertMaterial({
+          map: tex.depthMark,
+          transparent: true,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+        }),
+    };
+    for (const [key, geos] of lists) {
+      const m = new THREE.Mesh(mergeGeometries(geos), mats[key]());
+      geos.forEach((g) => g.dispose());
+      this.group.add(m);
+    }
+  }
+
+  // 교실 레벨 문: 모든 문틀에 나무 테두리. 교실 출입문에는 열어 둔 미닫이문과 '3-2' 표지판
+  _buildClassDoors(put) {
+    const t = this.theme;
+    const S = this.S;
+    const W = this.W;
+    const H = this.H;
+    const dw = t.doorW;
+    const dh = t.doorH;
+    // alongZ: 벽이 z 축을 따라 놓였는가. fixed: 벽선 좌표, mid: 문 중심, perp: 벽에서 수직으로 옮김
+    const edgeBox = (alongZ, fixed, along, len, depth, y0, y1, perp = 0) => {
+      const g = new THREE.BoxGeometry(alongZ ? depth : len, y1 - y0, alongZ ? len : depth);
+      return alongZ ? g.translate(fixed + perp, (y0 + y1) / 2, along) : g.translate(along, (y0 + y1) / 2, fixed + perp);
+    };
+    const frame = (alongZ, fixed, mid) => {
+      for (const s of [-1, 1]) put('frame', edgeBox(alongZ, fixed, mid + s * (dw / 2 + 0.04), 0.08, T + 0.08, 0, dh + 0.06));
+      put('frame', edgeBox(alongZ, fixed, mid, dw + 0.16, T + 0.08, dh, dh + 0.09));
+    };
+    for (let y = 0; y < H; y++) for (let x = 0; x < W - 1; x++) if (this.v[y * (W - 1) + x] === DOOR) frame(true, (x + 1) * S, (y + 0.5) * S);
+    for (let y = 0; y < H - 1; y++) for (let x = 0; x < W; x++) if (this.h[y * W + x] === DOOR) frame(false, (y + 1) * S, (x + 0.5) * S);
+
+    // 교실 둘레를 직접 훑는다 (연결성 보정으로 나중에 뚫린 문도 포함)
+    const perim = [];
+    for (const room of this.rooms) {
+      for (let y = room.y0; y < room.y0 + room.h; y++) {
+        for (let x = room.x0; x < room.x0 + room.w; x++) {
+          for (let d = 0; d < 4; d++) {
+            const nx = x + DX[d];
+            const ny = y + DY[d];
+            if (!this.inBounds(nx, ny) || this.roomOf[ny * W + nx] === room.id) continue;
+            if (this.getEdge(x, y, d) === DOOR) perim.push([x, y, d]);
+          }
+        }
+      }
+    }
+    {
+      for (const [x, y, d] of perim) {
+        const alongZ = d < 2;
+        const fixed = alongZ ? (x + (d === 0 ? 1 : 0)) * S : (y + (d === 2 ? 1 : 0)) * S;
+        const mid = alongZ ? (y + 0.5) * S : (x + 0.5) * S;
+        const side = d === 0 || d === 2 ? 1 : -1; // 복도 쪽
+        const h = this.rng.chance(0.5) ? 1 : -1; // 문을 밀어 둔 쪽
+        const door = new THREE.BoxGeometry(alongZ ? 0.035 : dw, dh - 0.03, alongZ ? dw : 0.035);
+        door.translate(
+          alongZ ? fixed + side * (T / 2 + 0.03) : mid + h * dw,
+          (dh - 0.03) / 2 + 0.01,
+          alongZ ? mid + h * dw : fixed + side * (T / 2 + 0.03),
+        );
+        put('door', door);
+        put('frame', edgeBox(alongZ, fixed, mid + (h * dw) / 2, dw * 2 + 0.12, 0.05, dh + 0.09, dh + 0.15, side * (T / 2 + 0.03)));
+        // 복도로 튀어나온 학급 표지판
+        const plate = new THREE.BoxGeometry(alongZ ? 0.56 : 0.035, 0.2, alongZ ? 0.035 : 0.56);
+        const po = side * (T / 2 + 0.29);
+        plate.translate(alongZ ? fixed + po : mid - h * 0.2, dh + 0.42, alongZ ? mid - h * 0.2 : fixed + po);
+        put('plate', plate);
+      }
+    }
   }
 
   // ---------- 접촉 그림자 ----------
@@ -720,6 +962,7 @@ export class Level {
           const lx = alongZ ? ex + dry * 0.15 : ex;
           const lz = alongZ ? ez : ez + dry * 0.15;
           lips.push(box(alongZ ? 0.3 : S, 0.06, alongZ ? S : 0.3, lx, 0.03, lz, 1, 1));
+          (this.poolEdges ||= []).push({ ex, ez, alongZ, dry });
         }
       }
     }
@@ -822,25 +1065,40 @@ export class Level {
       const maxX = (room.x0 + room.w) * S - T / 2;
       const minZ = room.y0 * S + T / 2;
       const maxZ = (room.y0 + room.h) * S - T / 2;
-      // 칠판 쪽 벽: 문이 없는 변을 고른다
+      // 칠판 쪽 벽: 실제 벽 상태를 보고, 문 없이 가장 길게 이어진 벽을 고른다
+      // (연결성 보정 단계에서 교실 벽에 새 문이 뚫릴 수 있어 room.doors 만으로는 부족하다)
       const sides = [0, 1, 2, 3].map((d) => {
+        const n = d < 2 ? room.h : room.w;
+        let best = { start: 0, len: 0 };
+        let run = 0;
         let doors = 0;
-        for (const dd of room.doors) if (dd[2] === d) doors++;
-        return { d, doors, len: d < 2 ? room.h * S : room.w * S };
+        for (let i = 0; i < n; i++) {
+          const cx = d === 0 ? room.x0 + room.w - 1 : d === 1 ? room.x0 : room.x0 + i;
+          const cy = d === 2 ? room.y0 + room.h - 1 : d === 3 ? room.y0 : room.y0 + i;
+          if (this.getEdge(cx, cy, d) === WALL) {
+            run++;
+            if (run > best.len) best = { start: i - run + 1, len: run };
+          } else {
+            run = 0;
+            doors++;
+          }
+        }
+        return { d, doors, run: best };
       });
-      sides.sort((a, b) => a.doors - b.doors || b.len - a.len);
+      sides.sort((a, b) => b.run.len - a.run.len || a.doors - b.doors);
       const side = sides[0].d;
+      const run = sides[0].run;
       const nx = -DX[side];
       const nz = -DY[side];
-      const cxm = (minX + maxX) / 2;
-      const czm = (minZ + maxZ) / 2;
-      const bx = side === 0 ? maxX : side === 1 ? minX : cxm;
-      const bz = side === 2 ? maxZ : side === 3 ? minZ : czm;
-      const bw = Math.min(sides[0].len - 1.6, 5.5);
+      const runMid = (side < 2 ? room.y0 : room.x0) * S + (run.start + run.len / 2) * S;
+      const bx = side === 0 ? maxX : side === 1 ? minX : runMid;
+      const bz = side === 2 ? maxZ : side === 3 ? minZ : runMid;
+      const bw = Math.min(run.len * S - 1.2, 5.5);
       const board = new THREE.Mesh(new THREE.PlaneGeometry(bw, bw * 0.375), boardMat);
       board.position.set(bx + nx * 0.02, 1.55, bz + nz * 0.02);
       board.rotation.y = Math.atan2(nx, nz);
       this.group.add(board);
+      (this.boardSpots ||= []).push({ x: bx, z: bz, nx, nz, top: 1.55 + bw * 0.1875 });
       // 칠판 벽에는 쪽지가 붙지 않게
       for (let y = room.y0; y < room.y0 + room.h; y++)
         for (let x = room.x0; x < room.x0 + room.w; x++) this.reserved.add(`${x},${y},${side}`);
@@ -1070,6 +1328,10 @@ export class Level {
     const c = this.panelColor;
     const v = 0.06 + b * 0.94;
     for (let k = 0; k < 4; k++) col.setXYZ(i * 4 + k, c.r * v, c.g * v, c.b * v);
+    if (this.lightPool) {
+      const pc = this.lightPool.geometry.attributes.color;
+      for (let k = 0; k < 4; k++) pc.setW(i * 4 + k, b);
+    }
   }
 
   dispose() {

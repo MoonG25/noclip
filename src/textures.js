@@ -1016,6 +1016,198 @@ function drownedFace(scream) {
   return c;
 }
 
+// ---------- 소품 ----------
+// 천장 환기구 그릴
+function vent() {
+  const [c, x] = canvas(128, 128);
+  x.fillStyle = '#c9c4b4';
+  x.fillRect(0, 0, 128, 128);
+  x.fillStyle = '#2a2722';
+  for (let i = 0; i < 9; i++) x.fillRect(14, 14 + i * 11.5, 100, 6);
+  x.strokeStyle = '#8f8a7c';
+  x.lineWidth = 6;
+  x.strokeRect(3, 3, 122, 122);
+  stains(x, 128, 128, 2, '60,55,40', 30, 0.3);
+  grain(x, 128, 128, 14);
+  return c;
+}
+
+// 복도 게시판: 코르크판에 압정으로 꽂힌 종이들
+function corkboard() {
+  const [c, x] = canvas(384, 256);
+  x.fillStyle = '#9c7446';
+  x.fillRect(0, 0, 384, 256);
+  for (let i = 0; i < 2500; i++) {
+    x.fillStyle = rng.next() > 0.5 ? 'rgba(70,45,20,0.35)' : 'rgba(200,160,110,0.3)';
+    x.fillRect(rng.next() * 384, rng.next() * 256, 2, 2);
+  }
+  const papers = [
+    ['가정통신문', '#ece6d2'],
+    ['급식 안내', '#f3e7a8'],
+    ['3-2 청소당번', '#dfe9f0'],
+    ['분실물', '#f1d9d9'],
+    ['', '#ece6d2'],
+  ];
+  papers.forEach(([title, col], i) => {
+    const px = 22 + (i % 3) * 120 + rng.range(-8, 8);
+    const py = 22 + Math.floor(i / 3) * 112 + rng.range(-6, 6);
+    x.save();
+    x.translate(px + 45, py + 45);
+    x.rotate(rng.range(-0.08, 0.08));
+    x.fillStyle = col;
+    x.fillRect(-45, -45, 90, 96);
+    x.fillStyle = 'rgba(30,30,40,0.8)';
+    x.font = 'bold 13px "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+    x.fillText(title, -38, -26);
+    x.fillStyle = 'rgba(30,30,40,0.35)';
+    for (let k = 0; k < 6; k++) x.fillRect(-38, -14 + k * 9, 60 + rng.next() * 16, 2);
+    x.fillStyle = '#c0392b';
+    x.beginPath();
+    x.arc(0, -40, 4, 0, Math.PI * 2);
+    x.fill();
+    x.restore();
+  });
+  x.strokeStyle = '#5b3f22';
+  x.lineWidth = 12;
+  x.strokeRect(0, 0, 384, 256);
+  grain(x, 384, 256, 12);
+  return c;
+}
+
+// 교실 시계: 3시 14분에 멈춰 있다
+function clockFace() {
+  const [c, x] = canvas(256, 256);
+  x.fillStyle = '#f2efe6';
+  x.beginPath();
+  x.arc(128, 128, 124, 0, Math.PI * 2);
+  x.fill();
+  x.fillStyle = '#1d1c1a';
+  for (let i = 0; i < 60; i++) {
+    const a = (i / 60) * Math.PI * 2;
+    const long = i % 5 === 0;
+    x.save();
+    x.translate(128 + Math.sin(a) * 108, 128 - Math.cos(a) * 108);
+    x.rotate(a);
+    x.fillRect(-(long ? 3 : 1), -(long ? 10 : 5), long ? 6 : 2, long ? 20 : 10);
+    x.restore();
+  }
+  x.font = 'bold 26px sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  for (let h = 1; h <= 12; h++) {
+    const a = (h / 12) * Math.PI * 2;
+    x.fillText(String(h), 128 + Math.sin(a) * 82, 128 - Math.cos(a) * 82);
+  }
+  const hand = (a, len, w) => {
+    x.save();
+    x.translate(128, 128);
+    x.rotate(a);
+    x.fillRect(-w / 2, -len, w, len + 12);
+    x.restore();
+  };
+  hand(((3 + 14 / 60) / 12) * Math.PI * 2, 56, 8);
+  hand((14 / 60) * Math.PI * 2, 88, 5);
+  x.fillStyle = '#b3261e';
+  hand((0 / 60) * Math.PI * 2, 96, 2);
+  x.beginPath();
+  x.arc(128, 128, 7, 0, Math.PI * 2);
+  x.fill();
+  // 유리 반사
+  const g = x.createLinearGradient(40, 20, 180, 200);
+  g.addColorStop(0, 'rgba(255,255,255,0.35)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0)');
+  x.fillStyle = g;
+  x.beginPath();
+  x.arc(128, 128, 120, 0, Math.PI * 2);
+  x.fill();
+  return c;
+}
+
+// 교실 미닫이문: 나무 판에 위쪽 유리창
+function classDoor() {
+  const [c, x] = canvas(256, 512);
+  x.fillStyle = '#a07c52';
+  x.fillRect(0, 0, 256, 512);
+  for (let i = 0; i < 40; i++) {
+    x.strokeStyle = `rgba(${rng.next() > 0.5 ? '70,48,25' : '190,150,100'},0.2)`;
+    x.lineWidth = 1 + rng.next() * 2;
+    const px = rng.next() * 256;
+    x.beginPath();
+    x.moveTo(px, 0);
+    x.bezierCurveTo(px + (rng.next() - 0.5) * 12, 170, px + (rng.next() - 0.5) * 12, 340, px, 512);
+    x.stroke();
+  }
+  x.fillStyle = '#20262a';
+  x.fillRect(40, 50, 176, 170);
+  x.fillStyle = 'rgba(160,190,210,0.18)';
+  x.fillRect(48, 58, 70, 154);
+  x.strokeStyle = '#5c4228';
+  x.lineWidth = 12;
+  x.strokeRect(40, 50, 176, 170);
+  x.beginPath();
+  x.moveTo(128, 50);
+  x.lineTo(128, 220);
+  x.stroke();
+  x.fillStyle = '#c9ccce';
+  x.fillRect(206, 270, 14, 60);
+  x.strokeStyle = '#5c4228';
+  x.lineWidth = 8;
+  x.strokeRect(4, 4, 248, 504);
+  stains(x, 256, 512, 3, '60,40,20', 40, 0.2);
+  grain(x, 256, 512, 14);
+  return c;
+}
+
+// 학급 표지판. 전부 3-2다
+function classPlate() {
+  const [c, x] = canvas(256, 96);
+  x.fillStyle = '#f2f0e8';
+  x.fillRect(0, 0, 256, 96);
+  x.strokeStyle = '#1f3d6b';
+  x.lineWidth = 8;
+  x.strokeRect(4, 4, 248, 88);
+  x.fillStyle = '#1f3d6b';
+  x.font = 'bold 54px "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText('3 - 2', 128, 52);
+  stains(x, 256, 96, 2, '120,100,60', 30, 0.2);
+  return c;
+}
+
+// 수영장 데크 배수구
+function drain() {
+  const [c, x] = canvas(128, 128);
+  x.clearRect(0, 0, 128, 128);
+  x.fillStyle = '#9aa3a2';
+  x.beginPath();
+  x.arc(64, 64, 62, 0, Math.PI * 2);
+  x.fill();
+  x.fillStyle = '#111516';
+  for (let i = -4; i <= 4; i++) {
+    const w = Math.sqrt(Math.max(0, 50 * 50 - (i * 11) ** 2)) * 2;
+    x.fillRect(64 - w / 2, 64 + i * 11 - 3, w, 6);
+  }
+  x.strokeStyle = '#6d7675';
+  x.lineWidth = 6;
+  x.beginPath();
+  x.arc(64, 64, 58, 0, Math.PI * 2);
+  x.stroke();
+  return c;
+}
+
+// 수심 표시 페인트
+function depthMark() {
+  const [c, x] = canvas(256, 96);
+  x.clearRect(0, 0, 256, 96);
+  x.fillStyle = 'rgba(30,60,120,0.85)';
+  x.font = 'bold 64px "Arial Narrow", sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText('1.0 M', 128, 52);
+  return c;
+}
+
 // 접촉 그림자용 세로 그라디언트 (아래 v=0 이 진하고 위로 갈수록 사라진다). alphaMap으로 쓴다
 function aoGradient() {
   const [c, x] = canvas(4, 128);
@@ -1157,6 +1349,13 @@ export function makeTextures(renderer) {
     drownedScream: toTex(drownedFace(true), a, { repeat: false }),
     glow: toTex(glow(), a, { repeat: false }),
     ao: toTex(aoGradient(), a, { repeat: false, srgb: false }),
+    vent: toTex(vent(), a, { repeat: false }),
+    corkboard: toTex(corkboard(), a, { repeat: false }),
+    clock: toTex(clockFace(), a, { repeat: false }),
+    classDoor: toTex(classDoor(), a, { repeat: false }),
+    classPlate: toTex(classPlate(), a, { repeat: false }),
+    drain: toTex(drain(), a, { repeat: false }),
+    depthMark: toTex(depthMark(), a, { repeat: false }),
     caustics: toTex(caustics(), a, { srgb: false }),
     waterNormal: toTex(waterNormal(), a, { srgb: false }),
     paper: toTex(paper(), a, { repeat: false }),

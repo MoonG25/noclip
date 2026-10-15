@@ -70,6 +70,7 @@ export class LightRig {
     }
     if (this._dirty) {
       lv.panelMesh.geometry.attributes.color.needsUpdate = true;
+      if (lv.lightPool) lv.lightPool.geometry.attributes.color.needsUpdate = true;
       this._dirty = false;
     }
 
