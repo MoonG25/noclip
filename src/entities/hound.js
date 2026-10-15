@@ -1,13 +1,81 @@
 // LEVEL 0 · 하운드
-// 눈이 없는 창백한 인간형이 네 발로 기어 다닌다. 앞을 못 보고 소리로만 사냥한다.
-// 가까이서 소리를 들으면 전력 질주보다 빠르게 그 자리로 달려든다. 살아남으려면 소리를 내지 말 것.
+// 깡마른 살색 인간형이 손바닥과 발바닥으로 엎드려 걷는다. 굽은 등, 길게 늘어진 목,
+// 얼굴을 덮은 긴 검은 머리카락 아래로 귀까지 찢어진 웃음. 눈이 있어야 할 자리는 비어 있다.
+// 앞을 못 보고 소리로만 사냥한다. 가까이서 소리를 들으면 전력 질주보다 빠르게 그 자리로 달려든다.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EntityBase, WANDER, CHASE, SEARCH } from './base.js';
+
+const ARM_UP = -0.25; // 위팔: 살짝 앞으로
+const ARM_FORE = 0.35; // 아래팔: 뒤로 꺾여 바닥을 짚는다
+const LEG_UP = -0.35; // 허벅지: 앞·아래로
+const LEG_KNEE = 0.75; // 정강이: 뒤·아래로
+const HEAD_X = 0.3; // 고개를 떨군 기본 각도
+const HIPS = new THREE.Vector3(0, 0.98, -0.45);
 
 function wrap(a) {
   while (a > Math.PI) a -= Math.PI * 2;
   while (a < -Math.PI) a += Math.PI * 2;
   return a;
+}
+
+// 척추 곡선(y-z 평면)을 따라 단면 크기가 변하는 몸통. 등뼈 장식을 위해 곡선과 반지름 함수도 돌려준다
+function bodyTube(points, radii, segs = 56, radial = 16, vRepeat = 3) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  const R = (t) => {
+    const f = t * (radii.length - 1);
+    const i = Math.min(radii.length - 2, Math.floor(f));
+    const k = f - i;
+    const s = k * k * (3 - 2 * k);
+    return [radii[i][0] + (radii[i + 1][0] - radii[i][0]) * s, radii[i][1] + (radii[i + 1][1] - radii[i][1]) * s];
+  };
+  const S = new THREE.Vector3(1, 0, 0);
+  const frame = (t) => {
+    const P = curve.getPoint(t);
+    const T = curve.getTangent(t);
+    const U = new THREE.Vector3().crossVectors(T, S).normalize();
+    return { P, U };
+  };
+  const pos = [];
+  const nor = [];
+  const uv = [];
+  const idx = [];
+  const n = new THREE.Vector3();
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const { P, U } = frame(t);
+    const [rx, ry] = R(t);
+    for (let j = 0; j <= radial; j++) {
+      const a = (j / radial) * Math.PI * 2;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      pos.push(P.x + S.x * c * rx + U.x * s * ry, P.y + S.y * c * rx + U.y * s * ry, P.z + S.z * c * rx + U.z * s * ry);
+      n.set(S.x * c * ry + U.x * s * rx, S.y * c * ry + U.y * s * rx, S.z * c * ry + U.z * s * rx).normalize();
+      nor.push(n.x, n.y, n.z);
+      uv.push(j / radial, t * vRepeat);
+    }
+  }
+  for (let i = 0; i < segs; i++) {
+    for (let j = 0; j < radial; j++) {
+      const a = i * (radial + 1) + j;
+      const b = a + radial + 1;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return { geometry: g, frame, R };
+}
+
+// 근육 윤곽이 있는 팔다리 마디. profile: [반지름, y] (y는 -길이 ~ 0)
+function limb(profile) {
+  return new THREE.LatheGeometry(
+    profile.map(([r, y]) => new THREE.Vector2(r, y)),
+    10,
+  );
 }
 
 export class Hound extends EntityBase {
@@ -16,10 +84,15 @@ export class Hound extends EntityBase {
   }
 
   _build(tex) {
+    const root = new THREE.Group();
+    // 기준점(AI 위치·충돌 중심)이 어깨 근처에 오도록 몸 전체를 뒤로 민다. 머리가 먼저 닿는다
     const g = new THREE.Group();
-    const skin = new THREE.MeshLambertMaterial({ map: tex.houndSkin });
-    const dark = new THREE.MeshBasicMaterial({ color: 0x1a0505 });
-    const tooth = new THREE.MeshLambertMaterial({ color: 0xd8cfb0 });
+    g.position.z = -0.45;
+    root.add(g);
+    const skin = new THREE.MeshLambertMaterial({ map: tex.houndSkin, side: THREE.DoubleSide });
+    const nail = new THREE.MeshLambertMaterial({ color: 0x1a1212 });
+    const hairMat = new THREE.MeshLambertMaterial({ color: 0x0b0908 });
+    this.faceMat = new THREE.MeshLambertMaterial({ map: tex.houndFace });
     const add = (parent, geo, mat, x = 0, y = 0, z = 0) => {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
@@ -33,73 +106,158 @@ export class Hound extends EntityBase {
       return p;
     };
 
-    // 엉덩이를 축으로 몸 전체가 붙어 있다. 점프스케어 때는 앞발을 들고 일어선다
-    const hips = pivot(g, 0, 0.6, -0.4);
+    // 몸통 전체는 엉덩이를 축으로 붙어 있다. 점프스케어 때는 앞발을 들고 일어선다
+    const hips = pivot(g, HIPS.x, HIPS.y, HIPS.z);
     this.hips = hips;
-    const torso = add(hips, new THREE.CapsuleGeometry(0.16, 0.72, 4, 10), skin, 0, 0.06, 0.42);
-    torso.rotation.x = Math.PI / 2 - 0.08;
-    torso.scale.set(0.85, 1, 0.8);
-    // 피부 밑으로 튀어나온 등뼈
-    for (let i = 0; i < 9; i++) add(hips, new THREE.SphereGeometry(0.035, 6, 4), skin, 0, 0.19 + i * 0.006, 0.02 + i * 0.1);
-
-    // 앞으로 처진 목과 눈 없는 머리
-    const neck = add(hips, new THREE.CylinderGeometry(0.05, 0.065, 0.26, 8), skin, 0, -0.01, 1.0);
-    neck.rotation.x = 2.29;
-    const head = pivot(hips, 0, 0.0, 1.12);
-    this.head = head;
-    add(head, new THREE.SphereGeometry(0.13, 14, 10), skin).scale.set(0.85, 0.8, 1.25);
-    // 눈이 있어야 할 자리는 살갗으로 덮여 움푹 꺼져 있다
-    const socket = new THREE.MeshLambertMaterial({ map: tex.houndSkin, color: 0x6a5048 });
-    for (const s of [-1, 1]) add(head, new THREE.SphereGeometry(0.035, 8, 6), socket, s * 0.05, 0.035, 0.135).scale.set(1.2, 0.7, 0.35);
-    add(head, new THREE.SphereGeometry(0.08, 10, 8), dark, 0, -0.04, 0.06).scale.set(1, 0.7, 1.3);
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 8 - 0.5) * 2.2;
-      const t = add(head, new THREE.ConeGeometry(0.011, 0.05, 4), tooth, Math.sin(a) * 0.085, -0.07, 0.04 + Math.cos(a) * 0.1);
-      t.rotation.x = Math.PI;
+    const V = (y, z) => new THREE.Vector3(0, y, z);
+    const tube = bodyTube(
+      [V(-0.05, -0.13), V(0.01, 0), V(0.05, 0.23), V(-0.01, 0.48), V(-0.12, 0.71), V(-0.19, 0.88), V(-0.23, 1.03), V(-0.27, 1.13)],
+      [
+        [0.09, 0.08],
+        [0.15, 0.13],
+        [0.105, 0.095],
+        [0.15, 0.15],
+        [0.17, 0.13],
+        [0.075, 0.08],
+        [0.055, 0.06],
+        [0.05, 0.055],
+      ],
+    );
+    add(hips, tube.geometry, skin);
+    add(hips, new THREE.SphereGeometry(0.1, 12, 10), skin, 0, -0.05, -0.13).scale.set(1, 0.85, 0.85);
+    // 피부 밑으로 드러난 등뼈와 견갑골
+    for (let i = 0; i < 14; i++) {
+      const t = 0.08 + i * 0.04;
+      const { P, U } = tube.frame(t);
+      const ry = tube.R(t)[1];
+      add(hips, new THREE.SphereGeometry(0.02, 6, 4), skin, P.x + U.x * ry * 0.93, P.y + U.y * ry * 0.93, P.z + U.z * ry * 0.93);
     }
-    // 아래턱: 머리 뒤쪽이 경첩이라 축 늘어져 벌어진다
-    const jaw = pivot(head, 0, -0.06, -0.06);
-    this.jaw = jaw;
-    add(jaw, new THREE.SphereGeometry(0.1, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), skin, 0, 0, 0.12).scale.set(0.85, 0.6, 1.4);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 7 - 0.5) * 2.0;
-      add(jaw, new THREE.ConeGeometry(0.01, 0.045, 4), tooth, Math.sin(a) * 0.07, 0.02, 0.12 + Math.cos(a) * 0.1);
+    {
+      const { P, U } = tube.frame(0.55);
+      for (const s of [-1, 1]) {
+        const b = add(hips, new THREE.SphereGeometry(1, 10, 6), skin, P.x + s * 0.085, P.y + U.y * 0.1, P.z + U.z * 0.1);
+        b.scale.set(0.065, 0.025, 0.09);
+        b.rotation.z = s * 0.35;
+      }
     }
 
-    // 앞다리: 팔꿈치가 몸보다 높이 솟은 거미 같은 긴 팔
+    // 앞다리: 사람 팔. 팔꿈치가 뒤로 꺾여 손바닥으로 바닥을 짚는다
     this.arms = [];
     for (const s of [-1, 1]) {
-      const sh = pivot(hips, s * 0.15, 0.08, 0.78);
-      sh.rotation.z = s * 2.36;
-      add(sh, new THREE.CylinderGeometry(0.04, 0.032, 0.5, 7), skin, 0, -0.25, 0);
-      add(sh, new THREE.SphereGeometry(0.04, 7, 5), skin, 0, -0.5, 0);
-      const el = pivot(sh, 0, -0.5, 0);
-      el.rotation.z = -s * 2.26;
-      add(el, new THREE.CylinderGeometry(0.03, 0.022, 1.0, 7), skin, 0, -0.5, 0);
-      for (let f = -1; f <= 1; f++) {
-        const finger = add(el, new THREE.CylinderGeometry(0.012, 0.005, 0.2, 5), skin, f * 0.03, -1.0, 0.08);
-        finger.rotation.x = Math.PI / 2 - 0.25;
-        finger.rotation.z = f * 0.35;
-      }
-      this.arms.push(sh);
+      const sh = pivot(hips, s * 0.15, -0.16, 0.73);
+      sh.rotation.x = ARM_UP;
+      add(sh, new THREE.SphereGeometry(0.058, 10, 8), skin);
+      add(sh, limb([[0.034, -0.4], [0.042, -0.32], [0.05, -0.16], [0.056, -0.05], [0.05, 0]]), skin);
+      const el = pivot(sh, 0, -0.4, 0);
+      el.rotation.x = ARM_FORE;
+      add(el, new THREE.SphereGeometry(0.038, 8, 6), skin);
+      add(el, limb([[0.024, -0.38], [0.03, -0.3], [0.04, -0.12], [0.037, 0]]), skin);
+      const wr = pivot(el, 0, -0.38, 0);
+      this._hand(wr, skin, nail, add, s);
+      this.arms.push({ sh, el, wr });
     }
 
-    // 뒷다리: 무릎을 바닥에 대고 발을 뒤로 끌며 긴다
+    // 뒷다리: 엉덩이가 높이 들린 채 발바닥으로 선다 (엉덩이 축과 따로 움직인다)
     this.legs = [];
     for (const s of [-1, 1]) {
-      const hip = pivot(hips, s * 0.13, -0.02, 0);
-      hip.rotation.x = -0.3;
-      add(hip, new THREE.CylinderGeometry(0.055, 0.04, 0.5, 7), skin, 0, -0.25, 0);
-      add(hip, new THREE.SphereGeometry(0.045, 7, 5), skin, 0, -0.5, 0);
-      const knee = pivot(hip, 0, -0.5, 0);
-      knee.rotation.x = 1.67;
-      add(knee, new THREE.CylinderGeometry(0.04, 0.025, 0.5, 7), skin, 0, -0.25, 0);
-      add(knee, new THREE.BoxGeometry(0.06, 0.03, 0.12), skin, 0, -0.52, 0.03);
-      this.legs.push(hip);
+      const hip = pivot(g, s * 0.11, 0.95, -0.45);
+      hip.rotation.x = LEG_UP;
+      add(hip, limb([[0.045, -0.47], [0.055, -0.4], [0.07, -0.24], [0.075, -0.1], [0.065, 0]]), skin);
+      const kn = pivot(hip, 0, -0.47, 0);
+      kn.rotation.x = LEG_KNEE;
+      add(kn, new THREE.SphereGeometry(0.05, 8, 6), skin);
+      add(kn, limb([[0.028, -0.47], [0.034, -0.4], [0.05, -0.22], [0.055, -0.1], [0.045, 0]]), skin);
+      const an = pivot(kn, 0, -0.47, 0);
+      this._foot(an, skin, nail, add);
+      this.legs.push({ hip, kn, an });
     }
-    // 기어 다니는데도 사람보다 크게 느껴지도록
-    g.scale.setScalar(1.2);
-    return g;
+
+    // 고개를 떨군 머리와 얼굴을 덮은 긴 머리카락
+    const head = pivot(hips, 0, -0.29, 1.2);
+    head.rotation.x = HEAD_X;
+    this.head = head;
+    const SC = new THREE.Vector3(0.86, 1.06, 0.95);
+    add(head, new THREE.SphereGeometry(0.1, 24, 16), this.faceMat).scale.copy(SC);
+    const front = Math.PI / 2;
+    const win = 1.2;
+    add(head, new THREE.SphereGeometry(0.106, 20, 12, front + win / 2, Math.PI * 2 - win, 0, Math.PI * 0.62), hairMat).scale.copy(SC);
+    add(head, new THREE.SphereGeometry(0.108, 20, 6, 0, Math.PI * 2, 0, Math.PI * 0.22), hairMat).scale.copy(SC);
+    this.hair = this._hair(head, hairMat, SC);
+    root.scale.setScalar(1.15);
+    return root;
+  }
+
+  _hand(parent, skin, nail, add, s) {
+    add(parent, new THREE.SphereGeometry(0.03, 6, 5), skin);
+    add(parent, new THREE.SphereGeometry(0.045, 8, 6), skin, 0, -0.012, 0.035).scale.set(1, 0.32, 1.15);
+    for (let f = 0; f < 4; f++) {
+      const x = -0.027 + f * 0.018;
+      const p = add(parent, new THREE.CylinderGeometry(0.0085, 0.0075, 0.065, 5), skin, x, -0.02, 0.1);
+      p.rotation.x = Math.PI / 2;
+      const d = add(parent, new THREE.CylinderGeometry(0.0072, 0.006, 0.045, 5), skin, x, -0.033, 0.145);
+      d.rotation.x = Math.PI / 2 + 0.55;
+      const c = add(parent, new THREE.ConeGeometry(0.0065, 0.026, 4), nail, x, -0.048, 0.168);
+      c.rotation.x = Math.PI / 2 + 0.75;
+    }
+    const th = add(parent, new THREE.CylinderGeometry(0.009, 0.007, 0.06, 5), skin, -s * 0.045, -0.02, 0.06);
+    th.rotation.set(Math.PI / 2, 0, s * 0.6);
+  }
+
+  _foot(parent, skin, nail, add) {
+    add(parent, new THREE.SphereGeometry(0.035, 6, 5), skin);
+    add(parent, new THREE.SphereGeometry(1, 10, 6), skin, 0, -0.04, 0.05).scale.set(0.045, 0.028, 0.11);
+    for (let t = 0; t < 5; t++) {
+      const x = -0.03 + t * 0.015;
+      add(parent, new THREE.SphereGeometry(0.011 - Math.abs(t - 0.5) * 0.0012, 6, 4), skin, x, -0.05, 0.155 - Math.abs(t - 1) * 0.008);
+      const c = add(parent, new THREE.ConeGeometry(0.006, 0.018, 4), nail, x, -0.056, 0.17 - Math.abs(t - 1) * 0.008);
+      c.rotation.x = Math.PI / 2 + 0.6;
+    }
+  }
+
+  // 머리 아래로 늘어진 가닥들. 머리가 숙여져 있으니 머리 기준 "아래"는 얼굴 쪽으로 기운다
+  _hair(head, mat, SC) {
+    const geos = [];
+    const fringeGeos = [];
+    const down = new THREE.Vector3(0, -1, 0).applyAxisAngle(new THREE.Vector3(1, 0, 0), -HEAD_X);
+    const up = new THREE.Vector3(0, -1, 0);
+    const q = new THREE.Quaternion();
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    for (let i = 0; i < 150; i++) {
+      const phi = Math.random() * Math.PI * 2;
+      const frontDist = Math.abs(wrap(phi - Math.PI / 2));
+      const fringe = frontDist < 0.62;
+      const theta = fringe ? rnd(0.14, 0.3) * Math.PI : rnd(0.08, 0.6) * Math.PI;
+      const root = new THREE.Vector3(
+        -Math.cos(phi) * Math.sin(theta) * 0.104 * SC.x,
+        Math.cos(theta) * 0.104 * SC.y,
+        Math.sin(phi) * Math.sin(theta) * 0.104 * SC.z,
+      );
+      const out = root.clone().normalize();
+      const dir = down
+        .clone()
+        .addScaledVector(out, fringe ? 0.35 : 0.22)
+        .add(new THREE.Vector3(rnd(-0.12, 0.12), 0, rnd(-0.12, 0.12)))
+        .normalize();
+      // 앞머리는 눈을 가리고 입은 드러날 만큼만, 옆·뒤는 길게
+      const len = fringe ? rnd(0.12, 0.2) : rnd(0.28, 0.55);
+      const geo = new THREE.CylinderGeometry(0.0045, 0.0015, len, 3, 1);
+      geo.translate(0, -len / 2, 0);
+      geo.applyQuaternion(q.setFromUnitVectors(up, dir));
+      geo.translate(root.x, root.y, root.z);
+      (fringe ? fringeGeos : geos).push(geo);
+    }
+    // 앞머리는 따로 둔다. 덮칠 때는 머리카락이 걷히며 얼굴이 드러난다
+    const group = new THREE.Group();
+    const back = new THREE.Mesh(mergeGeometries(geos), mat);
+    this.fringe = new THREE.Mesh(mergeGeometries(fringeGeos), mat);
+    group.add(back, this.fringe);
+    [...geos, ...fringeGeos].forEach((x) => x.dispose());
+    head.add(group);
+    return group;
+  }
+
+  setScream(on) {
+    this.faceMat.map = on ? this.tex.houndScream : this.tex.houndFace;
   }
 
   reset(level, theme) {
@@ -108,6 +266,8 @@ export class Hound extends EntityBase {
     this.listenYaw = 0;
     this.huntTarget = null;
     this.hips.rotation.set(0, 0, 0);
+    this.fringe.visible = true;
+    this.setScream(false);
   }
 
   // 멈춰서 소리 난 쪽으로 고개를 돌리고 귀를 기울인다
@@ -180,41 +340,57 @@ export class Hound extends EntityBase {
 
   jumpscarePose() {
     this.syncMesh();
-    this.hips.rotation.set(-0.95, 0, 0);
-    for (const a of this.arms) a.rotation.x = -0.6;
-    this.jaw.rotation.x = 1.1;
+    this.setScream(true);
+    this.fringe.visible = false;
+    this.hair.rotation.set(0.6, 0, 0); // 덮치는 기세에 머리카락이 뒤로 젖혀진다
+    // 앞발을 들고 일어서며 두 팔을 뻗는다
+    this.hips.rotation.set(-0.8, 0, 0);
+    this.hips.position.y = HIPS.y;
+    for (const a of this.arms) {
+      a.sh.rotation.x = -1.3;
+      a.el.rotation.x = 0.2;
+    }
   }
 
   _animate(dt, time, moving) {
     const hunt = this.state === CHASE;
-    this.walk += this.speed * dt * (hunt ? 2.2 : 3.0);
+    this.setScream(hunt);
+    this.walk += this.speed * dt * (hunt ? 2.4 : 3.2);
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.y = this.yaw;
     const k = moving ? Math.min(1, this.speed / 1.2) : 0;
     const w = this.walk;
-    // 대각선 다리끼리 같이 움직인다
-    this.arms[0].rotation.x = Math.sin(w) * 0.5 * k;
-    this.arms[1].rotation.x = Math.sin(w + Math.PI) * 0.5 * k;
-    this.legs[0].rotation.x = -0.3 + Math.sin(w + Math.PI) * 0.35 * k;
-    this.legs[1].rotation.x = -0.3 + Math.sin(w) * 0.35 * k;
-    this.hips.position.y = 0.6 + Math.abs(Math.sin(w)) * 0.05 * k;
-    this.hips.rotation.set(hunt ? 0.08 : 0, 0, Math.sin(w) * 0.06 * k);
+    // 대각선 다리끼리 같이 움직인다 (왼앞·오른뒤 / 오른앞·왼뒤)
+    for (let i = 0; i < 2; i++) {
+      const a = this.arms[i];
+      const pa = w + (i ? Math.PI : 0);
+      a.sh.rotation.x = ARM_UP + Math.sin(pa) * 0.35 * k;
+      a.el.rotation.x = ARM_FORE + Math.max(0, Math.sin(pa + Math.PI / 2)) * 0.35 * k;
+      a.wr.rotation.x = -(a.sh.rotation.x + a.el.rotation.x);
+      const l = this.legs[i];
+      const pl = w + (i ? 0 : Math.PI);
+      l.hip.rotation.x = LEG_UP + Math.sin(pl) * 0.3 * k;
+      l.kn.rotation.x = LEG_KNEE + Math.max(0, Math.sin(pl + Math.PI / 2)) * 0.45 * k;
+      l.an.rotation.x = -(l.hip.rotation.x + l.kn.rotation.x);
+    }
+    this.hips.position.y = HIPS.y + Math.abs(Math.sin(w)) * 0.03 * k;
+    this.hips.rotation.set(hunt ? 0.06 : 0, 0, Math.sin(w) * 0.05 * k);
 
-    // 머리: 냄새 맡듯 좌우로 흔들다가, 귀를 기울일 때는 소리 쪽으로 고개를 꺾는다
-    let hx = 0.05;
-    let hy = Math.sin(time * 1.4) * 0.45;
+    // 머리: 좌우로 천천히 흔들다가, 귀를 기울일 때는 소리 쪽으로 고개를 꺾는다
+    let hx = HEAD_X;
+    let hy = Math.sin(time * 1.1) * 0.35;
     let hz = 0;
     if (this.listenT > 0) {
-      hx = 0.1;
+      hx = HEAD_X - 0.25;
       hy = this.listenYaw;
       hz = 0.55 + Math.sin(time * 3) * 0.1;
     }
     if (hunt) {
-      hx = -0.05;
+      hx = HEAD_X - 0.3;
       hy = (Math.random() - 0.5) * 0.15;
     }
     this.head.rotation.set(hx, hy, hz);
     if (Math.random() < (hunt ? 0.2 : 0.02)) this.head.rotation.z += (Math.random() - 0.5) * 0.8;
-    this.jaw.rotation.x = hunt ? 0.75 + Math.random() * 0.2 : 0.35 + Math.sin(time * 2) * 0.08;
+    this.hair.rotation.set(0, 0, Math.sin(time * 1.7) * 0.04 + Math.sin(w) * 0.05 * k);
   }
 }

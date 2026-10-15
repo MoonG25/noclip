@@ -637,14 +637,153 @@ function hair() {
   return c;
 }
 
-// 하운드 피부: 창백하고 멍든 살갗, 비치는 핏줄과 갈비뼈
+// 하운드 얼굴. 구의 등장방형 UV에 맞춰 그린다 (얼굴 중심 u=0.25).
+// 눈이 있어야 할 자리는 움푹 꺼진 구멍이고, 입은 귀까지 찢어져 웃고 있다.
+function houndFace(scream) {
+  const W = 1024;
+  const H = 512;
+  const [c, x] = canvas(W, H);
+  const cx = 256;
+  const r = new RNG(55);
+  x.fillStyle = '#c99c8c';
+  x.fillRect(0, 0, W, H);
+  const shade = x.createRadialGradient(cx, 280, 60, cx, 280, 300);
+  shade.addColorStop(0, 'rgba(0,0,0,0)');
+  shade.addColorStop(1, 'rgba(70,35,30,0.45)');
+  x.fillStyle = shade;
+  x.fillRect(0, 0, W, H);
+  stains(x, W, H, 10, '140,80,80', 50, 0.12);
+  // 머리카락에 덮이는 정수리와 뒤통수
+  x.fillStyle = '#0d0a09';
+  x.fillRect(0, 0, W, 110);
+  x.fillRect(440, 0, W - 440, H);
+  x.fillRect(0, 0, 76, H);
+
+  // 이마 주름
+  x.strokeStyle = 'rgba(90,50,45,0.45)';
+  x.lineWidth = 2;
+  for (let i = 0; i < 5; i++) {
+    x.beginPath();
+    for (let k = 0; k <= 10; k++) {
+      const px = cx - 80 + k * 16;
+      const py = 150 + i * 13 + Math.sin(k * 0.9 + i) * 3 + (r.next() - 0.5) * 2;
+      if (k === 0) x.moveTo(px, py);
+      else x.lineTo(px, py);
+    }
+    x.stroke();
+  }
+
+  for (const s of [-1, 1]) {
+    // 눈이 없는, 움푹 꺼진 구멍
+    const ex = cx + s * 58;
+    const ey = 252;
+    const g = x.createRadialGradient(ex, ey, 2, ex, ey, 62);
+    g.addColorStop(0, 'rgba(8,3,3,1)');
+    g.addColorStop(0.35, 'rgba(25,8,8,0.95)');
+    g.addColorStop(0.65, 'rgba(70,30,30,0.55)');
+    g.addColorStop(1, 'rgba(70,30,30,0)');
+    x.fillStyle = g;
+    x.fillRect(ex - 64, ey - 64, 128, 128);
+    x.strokeStyle = 'rgba(80,40,38,0.6)';
+    x.lineWidth = 2;
+    for (let k = 0; k < 3; k++) {
+      x.beginPath();
+      x.arc(ex, ey + 6, 36 + k * 9, Math.PI * 0.15, Math.PI * 0.85);
+      x.stroke();
+    }
+    // 홀쭉하게 꺼진 볼
+    const ch = x.createLinearGradient(cx + s * 70, 0, cx + s * 120, 0);
+    ch.addColorStop(0, 'rgba(60,25,25,0)');
+    ch.addColorStop(1, 'rgba(60,25,25,0.35)');
+    x.fillStyle = ch;
+    x.fillRect(Math.min(cx + s * 70, cx + s * 120), 285, 50, 90);
+  }
+  // 콧구멍
+  x.fillStyle = 'rgba(30,10,10,0.85)';
+  for (const s of [-1, 1]) {
+    x.beginPath();
+    x.ellipse(cx + s * 8, 308, 3, 6, s * 0.3, 0, Math.PI * 2);
+    x.fill();
+  }
+
+  const my = 350;
+  if (!scream) {
+    // 귀까지 찢어진 웃음
+    x.fillStyle = '#2a0b0b';
+    x.beginPath();
+    x.moveTo(cx - 128, my - 22);
+    x.quadraticCurveTo(cx, my + 44, cx + 128, my - 22);
+    x.quadraticCurveTo(cx, my + 6, cx - 128, my - 22);
+    x.fill();
+    x.fillStyle = '#d6c79c';
+    for (let k = -9; k <= 9; k++) {
+      const t = k / 9;
+      const px = cx + t * 112;
+      const top = my - 18 * t * t + 6 + 10 * (1 - t * t);
+      const h = 8 + 10 * (1 - t * t);
+      x.fillRect(px - 4, top - h * 0.55, 8, h * 0.5);
+      x.fillRect(px - 4, top + 2, 8, h * 0.45);
+    }
+    x.strokeStyle = '#5e2424';
+    x.lineWidth = 3;
+    x.beginPath();
+    x.moveTo(cx - 128, my - 22);
+    x.quadraticCurveTo(cx, my + 44, cx + 128, my - 22);
+    x.stroke();
+    x.beginPath();
+    x.moveTo(cx - 128, my - 22);
+    x.quadraticCurveTo(cx, my + 6, cx + 128, my - 22);
+    x.stroke();
+    x.lineWidth = 2;
+    x.strokeStyle = 'rgba(90,40,38,0.6)';
+    for (const s of [-1, 1]) {
+      x.beginPath();
+      x.moveTo(cx + s * 128, my - 22);
+      x.quadraticCurveTo(cx + s * 146, my - 40, cx + s * 150, my - 66);
+      x.stroke();
+    }
+  } else {
+    // 턱이 빠질 듯 벌어진 입
+    x.fillStyle = '#5e2424';
+    x.beginPath();
+    x.ellipse(cx, my + 24, 70, 104, 0, 0, Math.PI * 2);
+    x.fill();
+    x.fillStyle = '#120404';
+    x.beginPath();
+    for (let k = 0; k <= 32; k++) {
+      const a = (k / 32) * Math.PI * 2;
+      const j = 1 + (r.next() - 0.5) * 0.1;
+      x.lineTo(cx + Math.cos(a) * 60 * j, my + 24 + Math.sin(a) * 94 * j);
+    }
+    x.fill();
+    x.fillStyle = '#d6c79c';
+    for (let k = -4; k <= 4; k++) {
+      x.fillRect(cx + k * 12 - 4, my - 70 + Math.abs(k) * 5, 8, 16);
+      x.fillRect(cx + k * 12 - 4, my + 104 - Math.abs(k) * 5, 8, 14);
+    }
+    x.strokeStyle = 'rgba(70,30,28,0.7)';
+    x.lineWidth = 2;
+    for (const s of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        x.beginPath();
+        x.moveTo(cx + s * 66, my + k * 30 - 10);
+        x.lineTo(cx + s * (110 + k * 8), my + k * 34 - 30);
+        x.stroke();
+      }
+    }
+  }
+  grain(x, W, H, 14);
+  return c;
+}
+
+// 하운드 피부: 핏기 없는 살색, 멍, 비치는 핏줄과 갈비뼈
 function houndSkin() {
   const S = 256;
   const [c, x] = canvas(S, S);
-  x.fillStyle = '#b8a294';
+  x.fillStyle = '#c99a8a';
   x.fillRect(0, 0, S, S);
-  stains(x, S, S, 8, '120,90,95', 50, 0.18);
-  stains(x, S, S, 5, '90,70,60', 30, 0.2);
+  stains(x, S, S, 8, '150,85,90', 50, 0.18);
+  stains(x, S, S, 5, '110,70,60', 30, 0.2);
   for (let i = 0; i < 9; i++) {
     const y = 20 + i * 26;
     const g = x.createLinearGradient(0, y - 6, 0, y + 6);
@@ -729,6 +868,8 @@ export function makeTextures(renderer) {
     dress: toTex(dress(), a),
     hair: toTex(hair(), a),
     houndSkin: toTex(houndSkin(), a),
+    houndFace: toTex(houndFace(false), a, { repeat: false }),
+    houndScream: toTex(houndFace(true), a, { repeat: false }),
     glow: toTex(glow(), a, { repeat: false }),
     paper: toTex(paper(), a, { repeat: false }),
   };

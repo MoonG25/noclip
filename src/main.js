@@ -454,9 +454,9 @@ function updateCaught(dt) {
   const k = Math.min(1, dt * 14);
   player.yaw += dyaw * k;
   player.pitch += (pitch - player.pitch) * k;
-  // 얼굴이 화면을 채울 때까지 다가온다
+  // 얼굴이 화면을 채울 때까지 다가온다 (몸 중심이 아니라 머리 기준)
   const toward = Math.hypot(player.pos.x - entity.pos.x, player.pos.z - entity.pos.z);
-  if (toward > entity.cfg.reach) {
+  if (Math.hypot(dx, dz) > 0.55 && toward > 0.3) {
     entity.pos.x += ((player.pos.x - entity.pos.x) / toward) * dt * 3;
     entity.pos.z += ((player.pos.z - entity.pos.z) / toward) * dt * 3;
   }
