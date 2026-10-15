@@ -31,6 +31,11 @@ export class EntityBase {
     return this.state === CHASE;
   }
 
+  // 지날 수 있는 칸 조건. 기본은 어디든, 익사체는 물속만
+  passable() {
+    return null;
+  }
+
   // 3D 사운드를 붙일 지점
   get audioAnchor() {
     return this.head;
@@ -103,7 +108,7 @@ export class EntityBase {
     const [ex, ey] = level.cellAt(this.pos.x, this.pos.z);
     const [tx, ty] = level.cellAt(x, z);
     this.state = INVESTIGATE;
-    this.path = level.findPath(ex, ey, tx, ty);
+    this.path = level.findPath(ex, ey, tx, ty, this.passable(level));
     this.searchCenter = [tx, ty];
     this.investigate = { x, z };
     this.pauseT = 0;
@@ -130,7 +135,7 @@ export class EntityBase {
   _teleportNear(level, player) {
     const [px, py] = level.cellAt(player.pos.x, player.pos.z);
     for (let i = 0; i < 12; i++) {
-      const [cx, cy] = level.randomCellAround(px, py, 5, 8);
+      const [cx, cy] = level.randomCellAround(px, py, 5, 8, this.passable(level));
       const c = level.center(cx, cy);
       if (!level.lineOfSight(c.x, c.z, player.pos.x, player.pos.z)) {
         this.pos.set(c.x, 0, c.z);
@@ -156,15 +161,15 @@ export class EntityBase {
       speed = this.cfg.wander * 1.2;
       this.searchT -= dt;
       if (!this.path.length && this.pauseT <= 0) {
-        const c = level.randomCellAround(...this.searchCenter, 0, 2);
-        this.path = level.findPath(ex, ey, ...c);
+        const c = level.randomCellAround(...this.searchCenter, 0, 2, this.passable(level));
+        this.path = level.findPath(ex, ey, ...c, this.passable(level));
         this.pauseT = Math.random() * 1.5;
       }
       if (this.searchT <= 0) this.state = WANDER;
     } else {
       if (!this.path.length && this.pauseT <= 0) {
-        const c = level.randomCellAround(ex, ey, 3, 10);
-        this.path = level.findPath(ex, ey, ...c);
+        const c = level.randomCellAround(ex, ey, 3, 10, this.passable(level));
+        this.path = level.findPath(ex, ey, ...c, this.passable(level));
         if (Math.random() < 0.35) this.pauseT = 1.5 + Math.random() * 3.5;
       }
       // 너무 멀리서 헤매면 플레이어 근처(보이지 않는 곳)로 옮겨온다
@@ -188,7 +193,7 @@ export class EntityBase {
     this.repath -= dt;
     if (this.repath <= 0 || !this.path.length) {
       const [tx, ty] = level.cellAt(tgt.x, tgt.z);
-      this.path = level.findPath(ex, ey, tx, ty);
+      this.path = level.findPath(ex, ey, tx, ty, this.passable(level));
       this.repath = 0.5;
       if (!this.path.length) return { x: tgt.x, z: tgt.z };
     }

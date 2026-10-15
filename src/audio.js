@@ -42,6 +42,15 @@ export class AudioEngine {
     this.master = ctx.createGain();
     this.master.gain.value = 0.9;
     this.master.connect(this.comp);
+    // 공간 울림. 레벨마다 양이 다르다 (풀룸이 가장 크게 울린다)
+    this.reverb = ctx.createConvolver();
+    this.reverb.buffer = this._impulse(2.8);
+    this.reverbSend = ctx.createGain();
+    this.reverbSend.gain.value = 0;
+    this.reverbSend.connect(this.reverb).connect(this.master);
+    this.sfx = ctx.createGain();
+    this.sfx.connect(this.master);
+    this.sfx.connect(this.reverbSend);
     this.white = noiseBuffer(ctx, 2);
     this.brown = noiseBuffer(ctx, 4, true);
     this.heartT = 0;
@@ -130,6 +139,25 @@ export class AudioEngine {
     hiss.gain.value = 0.012;
     hp.connect(hiss).connect(this.master);
 
+    // 풀룸: 수면이 벽에 철썩이는 소리
+    this.lap = ctx.createGain();
+    this.lap.gain.value = 0;
+    const lapN = this._loop(this.brown);
+    const lapF = ctx.createBiquadFilter();
+    lapF.type = 'bandpass';
+    lapF.frequency.value = 420;
+    lapF.Q.value = 0.9;
+    const lapMod = ctx.createGain();
+    lapMod.gain.value = 0.5;
+    const lapLfo = this._osc('sine', 0.23);
+    const lapLg = ctx.createGain();
+    lapLg.gain.value = 0.45;
+    lapLfo.connect(lapLg).connect(lapMod.gain);
+    lapN.connect(lapF).connect(lapMod).connect(this.lap);
+    this.lap.connect(this.master);
+    this.lap.connect(this.reverbSend);
+    this.dripT = 2;
+
     // 숨 가쁨
     this.breath = ctx.createGain();
     this.breath.gain.value = 0;
@@ -150,7 +178,23 @@ export class AudioEngine {
   setTheme(theme) {
     this.theme = theme;
     this.humBase = 0.05 * theme.audio.hum;
-    this.drone.gain.setTargetAtTime(0.09 * theme.audio.drone, this.ctx.currentTime, 1.5);
+    const t = this.ctx.currentTime;
+    this.drone.gain.setTargetAtTime(0.09 * theme.audio.drone, t, 1.5);
+    this.reverbSend.gain.setTargetAtTime(theme.audio.reverb ?? 0.12, t, 0.5);
+    this.lap.gain.setTargetAtTime(theme.audio.pool ? 0.1 : 0, t, 1.5);
+    this.dripT = 2;
+  }
+
+  // 지수적으로 사라지는 잡음 = 간단한 방 울림
+  _impulse(sec) {
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * sec);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
+    }
+    return buf;
   }
 
   // 엔티티 3D 사운드. 버스 하나를 현재 레벨의 엔티티에 붙이고, 종류별 소리를 흘려보낸다
@@ -188,6 +232,23 @@ export class AudioEngine {
       glp.type = 'lowpass';
       glp.frequency.value = 220;
       this._loop(this.brown).connect(glp).connect(mod);
+      // 익사체: 물속에서 부글거리는 소리
+      this.gurgle = ctx.createGain();
+      this.gurgle.gain.value = 0;
+      const gn = this._loop(this.brown);
+      const gf = ctx.createBiquadFilter();
+      gf.type = 'bandpass';
+      gf.frequency.value = 260;
+      gf.Q.value = 5;
+      const gm = ctx.createGain();
+      gm.gain.value = 0.5;
+      this.gurgleLfo = this._osc('square', 3.5);
+      const glg = ctx.createGain();
+      glg.gain.value = 0.5;
+      this.gurgleLfo.connect(glg).connect(gm.gain);
+      gn.connect(gf).connect(gm).connect(this.gurgle).connect(this.entityBus);
+      this.bubbleT = 0;
+
       this.houndBreath = ctx.createGain();
       this.houndBreath.gain.value = 0;
       mod.connect(this.houndBreath).connect(this.entityBus);
@@ -204,6 +265,7 @@ export class AudioEngine {
     this.musicBox.gain.cancelScheduledValues(t);
     this.musicBox.gain.setValueAtTime(0, t);
     this.houndBreath.gain.setValueAtTime(0, t);
+    this.gurgle.gain.setValueAtTime(0, t);
   }
 
   // 인형: 배회·수색 중에는 오르골이 흐르고, 추격이 시작되면 뚝 끊긴다
@@ -217,17 +279,52 @@ export class AudioEngine {
     const hound = this.kind === 'hound' && active;
     this.houndBreath.gain.setTargetAtTime(hound ? (chasing ? 0.9 : 0.45) : 0, t, 0.3);
     this.houndLfo.frequency.setTargetAtTime(chasing ? 2.4 : 0.6, t, 0.4);
+    const drowned = this.kind === 'drowned' && active;
+    this.gurgle.gain.setTargetAtTime(drowned ? (chasing ? 1.4 : 0.6) : 0, t, 0.3);
+    this.gurgleLfo.frequency.setTargetAtTime(chasing ? 9 : 3.5, t, 0.3);
   }
 
   // 추격 시작 신호: 인형은 킥킥거리고, 하운드는 비명을 지른다
   entityAlert() {
     if (this.kind === 'hound') this._houndScreech();
+    else if (this.kind === 'drowned') this._drownedRoar();
     else this.giggle(1);
+  }
+
+  // 물을 뿜으며 터져 나오는 낮은 포효
+  _drownedRoar() {
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const g = ctx.createGain();
+    this._env(g, t, 0.6, 0.05, 1.3);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 700;
+    const d = distortion(ctx, 25);
+    d.connect(lp).connect(g).connect(this.entityBus);
+    for (const f of [62, 93, 124]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.exponentialRampToValueAtTime(f * 0.6, t + 1.3);
+      o.connect(d);
+      o.start(t);
+      o.stop(t + 1.4);
+    }
+    this._noiseHit(this.entityBus, t, { freq: 900, type: 'bandpass', q: 0.6, gain: 0.7, decay: 0.6 });
   }
 
   // 하운드가 귀를 기울일 때 내는 딸깍거리는 소리
   entityListen() {
-    if (!this.entityBus || this.kind !== 'hound') return;
+    if (!this.entityBus) return;
+    if (this.kind === 'drowned') {
+      // 물 위로 몸을 일으키는 소리: 물이 쏟아져 내리고, 젖은 숨을 내쉰다
+      const t = this.ctx.currentTime;
+      this._noiseHit(this.entityBus, t, { freq: 800, type: 'bandpass', q: 0.6, gain: 0.6, decay: 0.9 });
+      this._noiseHit(this.entityBus, t + 0.6, { freq: 300, type: 'bandpass', q: 3, gain: 0.5, decay: 0.8 });
+      return;
+    }
+    if (this.kind !== 'hound') return;
     const t0 = this.ctx.currentTime;
     const n = 4 + Math.floor(Math.random() * 5);
     let t = t0;
@@ -388,17 +485,44 @@ export class AudioEngine {
   footstep(surface, loud) {
     const t = this.ctx.currentTime;
     const v = 0.08 + loud * 0.22;
+    const out = this.sfx;
     if (surface === 'carpet') {
-      this._noiseHit(this.master, t, { freq: 380 + Math.random() * 120, gain: v, decay: 0.09 });
+      this._noiseHit(out, t, { freq: 380 + Math.random() * 120, gain: v, decay: 0.09 });
+    } else if (surface === 'water') {
+      // 첨벙: 물을 가르는 쉭 소리 + 물방울 튀는 소리
+      this._noiseHit(out, t, { freq: 700 + Math.random() * 300, type: 'bandpass', q: 0.7, gain: v * 1.3, decay: 0.22 + loud * 0.15 });
+      this._noiseHit(out, t + 0.05, { freq: 2600, type: 'bandpass', q: 1.2, gain: v * 0.5, decay: 0.12 });
+      this._tone(out, t + 0.03, { f0: 380 + Math.random() * 200, f1: 900, gain: v * 0.25, decay: 0.06 });
+    } else if (surface === 'tile') {
+      // 젖은 타일: 딱딱하고 짧다. 울림은 리버브가 만든다
+      this._noiseHit(out, t, { freq: 2600 + Math.random() * 500, type: 'bandpass', q: 2, gain: v * 0.9, decay: 0.04 });
+      this._tone(out, t, { f0: 160 + Math.random() * 30, f1: 80, gain: v * 0.4, decay: 0.05 });
     } else {
-      this._noiseHit(this.master, t, { freq: 1800 + Math.random() * 400, type: 'bandpass', q: 1.5, gain: v * 0.9, decay: 0.06 });
-      this._tone(this.master, t, { f0: 120 + Math.random() * 30, f1: 60, gain: v * 0.5, decay: 0.08 });
+      this._noiseHit(out, t, { freq: 1800 + Math.random() * 400, type: 'bandpass', q: 1.5, gain: v * 0.9, decay: 0.06 });
+      this._tone(out, t, { f0: 120 + Math.random() * 30, f1: 60, gain: v * 0.5, decay: 0.08 });
     }
+  }
+
+  // 천장에서 떨어지는 물방울 (풀룸)
+  _drip() {
+    const t = this.ctx.currentTime;
+    const pan = this.ctx.createStereoPanner();
+    pan.pan.value = Math.random() * 2 - 1;
+    const g = this.ctx.createGain();
+    g.gain.value = 0.25 + Math.random() * 0.4;
+    g.connect(pan).connect(this.sfx);
+    const f = 900 + Math.random() * 1400;
+    this._tone(g, t, { f0: f, f1: f * 2.2, gain: 0.2, attack: 0.002, decay: 0.07 });
   }
 
   entityStep(chasing) {
     if (!this.entityBus) return;
     const t = this.ctx.currentTime;
+    if (this.kind === 'drowned') {
+      // 헤엄치며 물을 가르는 소리
+      this._noiseHit(this.entityBus, t, { freq: 600, type: 'bandpass', q: 0.8, gain: chasing ? 0.9 : 0.35, decay: chasing ? 0.25 : 0.4 });
+      return;
+    }
     if (this.kind === 'hound') {
       // 맨살이 카펫을 짚는 둔탁한 소리와 손톱 긁는 소리
       const v = chasing ? 0.9 : 0.4;
@@ -587,6 +711,13 @@ export class AudioEngine {
 
   ambient(dt) {
     this._musicBox();
+    if (this.theme && this.theme.audio.pool) {
+      this.dripT -= dt;
+      if (this.dripT <= 0) {
+        this.dripT = 0.6 + Math.random() * 3;
+        this._drip();
+      }
+    }
     if (this.kind === 'doll' && this.entityActive && !this.entityChasing) {
       this.giggleT -= dt;
       if (this.giggleT <= 0) {

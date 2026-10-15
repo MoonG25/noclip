@@ -10,6 +10,9 @@ export const DOOR = 2;
 const DX = [1, -1, 0, 0];
 const DY = [0, 0, 1, -1];
 const T = 0.2; // 벽 두께
+// 풀룸: 물에 잠긴 칸의 바닥 높이와 수면 높이 (마른 바닥 = 0)
+export const POOL_FLOOR = -1.0;
+export const WATER_Y = -0.35;
 
 export class Level {
   constructor(theme, seed, tex) {
@@ -26,6 +29,9 @@ export class Level {
     this.pv = new Uint8Array(this.v.length);
     this.ph = new Uint8Array(this.h.length);
     this.roomOf = new Int16Array(W * H).fill(-1);
+    this.water = new Uint8Array(W * H); // 1 = 물에 잠긴 칸
+    this.waterRegion = new Int16Array(W * H).fill(-1); // 이어진 물 구역 번호
+    this.ripples = [];
     this.rooms = [];
     this.pillars = [];
     this.fixtures = [];
@@ -71,7 +77,19 @@ export class Level {
     return { x: (cx + 0.5) * this.S, z: (cy + 0.5) * this.S };
   }
 
-  bfs(sx, sy, tx = -1, ty = -1) {
+  isWaterAt(x, z) {
+    const [cx, cy] = this.cellAt(x, z);
+    return this.water[cy * this.W + cx] === 1;
+  }
+  groundAt(x, z) {
+    return this.isWaterAt(x, z) ? POOL_FLOOR : 0;
+  }
+  surfaceAt(x, z) {
+    return this.isWaterAt(x, z) ? 'water' : this.theme.surface;
+  }
+
+  // pass(셀 번호)가 주어지면 그 조건을 만족하는 칸만 지난다 (익사체는 물속만)
+  bfs(sx, sy, tx = -1, ty = -1, pass = null) {
     const W = this.W;
     const dist = new Int16Array(W * this.H).fill(-1);
     const prev = new Int32Array(W * this.H).fill(-1);
@@ -85,7 +103,7 @@ export class Level {
       for (let d = 0; d < 4; d++) {
         if (this.getEdge(x, y, d) === WALL) continue;
         const n = (y + DY[d]) * W + x + DX[d];
-        if (dist[n] >= 0) continue;
+        if (dist[n] >= 0 || (pass && !pass(n))) continue;
         dist[n] = dist[c] + 1;
         prev[n] = c;
         q.push(n);
@@ -94,10 +112,11 @@ export class Level {
     return { dist, prev };
   }
 
-  findPath(sx, sy, tx, ty) {
+  findPath(sx, sy, tx, ty, pass = null) {
     if (sx === tx && sy === ty) return [];
-    const { dist, prev } = this.bfs(sx, sy, tx, ty);
     const W = this.W;
+    if (pass && !pass(ty * W + tx)) return [];
+    const { dist, prev } = this.bfs(sx, sy, tx, ty, pass);
     let c = ty * W + tx;
     if (dist[c] < 0) return [];
     const path = [];
@@ -108,8 +127,8 @@ export class Level {
     return path.reverse();
   }
 
-  randomCellAround(cx, cy, minD, maxD) {
-    const { dist } = this.bfs(cx, cy);
+  randomCellAround(cx, cy, minD, maxD, pass = null) {
+    const { dist } = this.bfs(cx, cy, -1, -1, pass);
     const opts = [];
     for (let i = 0; i < dist.length; i++) if (dist[i] >= minD && dist[i] <= maxD) opts.push(i);
     if (!opts.length) return [cx, cy];
@@ -342,6 +361,8 @@ export class Level {
       }
     }
 
+    if (t.water) this._genWater();
+
     // 6. 거리 기반 배치: 출구, 엔티티 시작점
     const { dist } = this.bfs(...this.spawnCell);
     this.spawnDist = dist;
@@ -350,6 +371,7 @@ export class Level {
     for (let i = 0; i < W * H; i++) {
       if (dist[i] < this.maxDist * 0.75) continue;
       if (R.enclosed && this.roomOf[i] >= 0) continue;
+      if (this.water[i]) continue; // 비상구는 마른 바닥에
       const x = i % W;
       const y = (i / W) | 0;
       for (let d = 0; d < 4; d++) if (this.getEdge(x, y, d) === WALL) exitOpts.push([x, y, d]);
@@ -364,8 +386,9 @@ export class Level {
     this.exitFace = r.pick(exitOpts);
     this.reserved.add(this.exitFace.join(','));
 
-    const entOpts = [];
-    for (let i = 0; i < W * H; i++) if (dist[i] >= this.maxDist * 0.55) entOpts.push(i);
+    let entOpts = [];
+    for (let i = 0; i < W * H; i++) if (dist[i] >= this.maxDist * 0.55 && (!t.water || this.water[i])) entOpts.push(i);
+    if (!entOpts.length) for (let i = 0; i < W * H; i++) if (!t.water || this.water[i]) entOpts.push(i);
     const e = r.pick(entOpts);
     this.entityCell = [e % W, (e / W) | 0];
 
@@ -382,6 +405,71 @@ export class Level {
     }
   }
 
+  // 방은 대부분 수영장, 복도는 군데군데 잠긴다. 시작 칸과 그 주변은 마른 바닥
+  _genWater() {
+    const r = this.rng;
+    const cfg = this.theme.water;
+    const W = this.W;
+    const H = this.H;
+    const noise = Float32Array.from({ length: W * H }, () => r.next());
+    const poolRoom = new Uint8Array(this.rooms.length);
+    this.rooms.forEach((room, k) => (poolRoom[k] = r.chance(cfg.room) ? 1 : 0));
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (this.roomOf[i] >= 0) {
+          this.water[i] = poolRoom[this.roomOf[i]];
+          continue;
+        }
+        let sum = noise[i];
+        let n = 1;
+        for (let d = 0; d < 4; d++) {
+          const nx = x + DX[d];
+          const ny = y + DY[d];
+          if (!this.inBounds(nx, ny)) continue;
+          sum += noise[ny * W + nx];
+          n++;
+        }
+        this.water[i] = sum / n > cfg.threshold ? 1 : 0;
+      }
+    }
+    const [sx, sy] = this.spawnCell;
+    for (let y = sy - 1; y <= sy + 1; y++) for (let x = sx - 1; x <= sx + 1; x++) if (this.inBounds(x, y)) this.water[y * W + x] = 0;
+
+    // 이어진 물 구역에 번호를 매긴다. 3칸보다 작은 웅덩이는 말려 버린다
+    this._labelWater();
+    const size = new Int32Array(this.waterRegions);
+    for (let i = 0; i < W * H; i++) if (this.waterRegion[i] >= 0) size[this.waterRegion[i]]++;
+    for (let i = 0; i < W * H; i++) if (this.waterRegion[i] >= 0 && size[this.waterRegion[i]] < 3) this.water[i] = 0;
+    this._labelWater();
+  }
+
+  _labelWater() {
+    const W = this.W;
+    const H = this.H;
+    this.waterRegion.fill(-1);
+    let region = 0;
+    for (let i = 0; i < W * H; i++) {
+      if (!this.water[i] || this.waterRegion[i] >= 0) continue;
+      const q = [i];
+      this.waterRegion[i] = region;
+      for (let qi = 0; qi < q.length; qi++) {
+        const c = q[qi];
+        const x = c % W;
+        const y = (c / W) | 0;
+        for (let d = 0; d < 4; d++) {
+          if (this.getEdge(x, y, d) === WALL) continue;
+          const nb = (y + DY[d]) * W + x + DX[d];
+          if (!this.water[nb] || this.waterRegion[nb] >= 0) continue;
+          this.waterRegion[nb] = region;
+          q.push(nb);
+        }
+      }
+      region++;
+    }
+    this.waterRegions = region;
+  }
+
   // ---------- 메시 ----------
   _build() {
     const t = this.theme;
@@ -392,6 +480,7 @@ export class Level {
     const H = this.H;
     const su = t.uv.wall;
     const wallG = [];
+    const yb = t.water ? POOL_FLOOR : 0; // 벽 아래쪽 끝
 
     const piece = (alongZ, fixed, mid, len, y0, y1, collide) => {
       if (alongZ) {
@@ -404,24 +493,24 @@ export class Level {
     };
     const edgeWall = (alongZ, fixed, mid, state) => {
       const L = S + T;
-      if (state === WALL) piece(alongZ, fixed, mid, L, 0, WH, true);
+      if (state === WALL) piece(alongZ, fixed, mid, L, yb, WH, true);
       else if (state === DOOR) {
         const dw = t.doorW;
         const seg = (L - dw) / 2;
-        piece(alongZ, fixed, mid - dw / 2 - seg / 2, seg, 0, WH, true);
-        piece(alongZ, fixed, mid + dw / 2 + seg / 2, seg, 0, WH, true);
+        piece(alongZ, fixed, mid - dw / 2 - seg / 2, seg, yb, WH, true);
+        piece(alongZ, fixed, mid + dw / 2 + seg / 2, seg, yb, WH, true);
         piece(alongZ, fixed, mid, dw, t.doorH, WH, false);
       }
     };
     for (let y = 0; y < H; y++) for (let x = 0; x < W - 1; x++) edgeWall(true, (x + 1) * S, (y + 0.5) * S, this.v[y * (W - 1) + x]);
     for (let y = 0; y < H - 1; y++) for (let x = 0; x < W; x++) edgeWall(false, (y + 1) * S, (x + 0.5) * S, this.h[y * W + x]);
     // 바깥 경계
-    piece(true, 0, (H * S) / 2, H * S + T, 0, WH, true);
-    piece(true, W * S, (H * S) / 2, H * S + T, 0, WH, true);
-    piece(false, 0, (W * S) / 2, W * S + T, 0, WH, true);
-    piece(false, H * S, (W * S) / 2, W * S + T, 0, WH, true);
+    piece(true, 0, (H * S) / 2, H * S + T, yb, WH, true);
+    piece(true, W * S, (H * S) / 2, H * S + T, yb, WH, true);
+    piece(false, 0, (W * S) / 2, W * S + T, yb, WH, true);
+    piece(false, H * S, (W * S) / 2, W * S + T, yb, WH, true);
     for (const [px, pz] of this.pillars) {
-      wallG.push(box(0.6, WH, 0.6, px, WH / 2, pz, su, su));
+      wallG.push(box(0.6, WH - yb, 0.6, px, (WH + yb) / 2, pz, su, su));
       this._addCollider(px - 0.3, pz - 0.3, px + 0.3, pz + 0.3);
     }
 
@@ -435,11 +524,14 @@ export class Level {
     };
 
     // 바닥/천장
-    const floor = new THREE.PlaneGeometry(W * S, H * S);
-    floor.rotateX(-Math.PI / 2);
-    floor.translate((W * S) / 2, 0, (H * S) / 2);
-    worldUV(floor, t.uv.floor, t.uv.floor);
-    this.group.add(new THREE.Mesh(floor, new THREE.MeshLambertMaterial({ map: tex[t.textures.floor] })));
+    if (t.water) this._buildPool(add);
+    else {
+      const floor = new THREE.PlaneGeometry(W * S, H * S);
+      floor.rotateX(-Math.PI / 2);
+      floor.translate((W * S) / 2, 0, (H * S) / 2);
+      worldUV(floor, t.uv.floor, t.uv.floor);
+      this.group.add(new THREE.Mesh(floor, new THREE.MeshLambertMaterial({ map: tex[t.textures.floor] })));
+    }
     const ceil = new THREE.PlaneGeometry(W * S, H * S);
     ceil.rotateX(Math.PI / 2);
     ceil.translate((W * S) / 2, WH, (H * S) / 2);
@@ -478,6 +570,99 @@ export class Level {
 
     add(wallG, wallMat);
     this._placeItems();
+  }
+
+  // 마른 데크 바닥, 한 단 꺼진 수영장 바닥과 옆면, 가장자리 턱, 전체를 덮는 수면
+  _buildPool(add) {
+    const t = this.theme;
+    const tex = this.tex;
+    const S = this.S;
+    const W = this.W;
+    const H = this.H;
+    const deck = [];
+    const basin = [];
+    const sides = [];
+    const lips = [];
+    const quad = (x, y, h, list, uv) => {
+      const g = new THREE.PlaneGeometry(S, S);
+      g.rotateX(-Math.PI / 2);
+      g.translate((x + 0.5) * S, h, (y + 0.5) * S);
+      list.push(worldUV(g, uv, uv));
+    };
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const wet = this.water[y * W + x];
+        quad(x, y, wet ? POOL_FLOOR : 0, wet ? basin : deck, t.uv.floor);
+        // 오른쪽·아래 이웃과 물/마른 바닥이 갈리고 벽이 없으면 수영장 옆면과 턱
+        for (const d of [0, 2]) {
+          const nx = x + DX[d];
+          const ny = y + DY[d];
+          if (!this.inBounds(nx, ny) || this.getEdge(x, y, d) === WALL) continue;
+          const nWet = this.water[ny * W + nx];
+          if (nWet === wet) continue;
+          const alongZ = d === 0;
+          const ex = alongZ ? (x + 1) * S : (x + 0.5) * S;
+          const ez = alongZ ? (y + 0.5) * S : (y + 1) * S;
+          const g = new THREE.PlaneGeometry(S, -POOL_FLOOR);
+          if (alongZ) g.rotateY(Math.PI / 2);
+          g.translate(ex, POOL_FLOOR / 2, ez);
+          sides.push(worldUV(g, t.uv.floor, t.uv.floor));
+          // 턱은 마른 쪽으로 15cm
+          const dry = wet ? 1 : -1;
+          const lx = alongZ ? ex + dry * 0.15 : ex;
+          const lz = alongZ ? ez : ez + dry * 0.15;
+          lips.push(box(alongZ ? 0.3 : S, 0.06, alongZ ? S : 0.3, lx, 0.03, lz, 1, 1));
+        }
+      }
+    }
+    add(deck, new THREE.MeshLambertMaterial({ map: tex[t.textures.floor] }));
+    add(basin, new THREE.MeshLambertMaterial({ map: tex[t.textures.basin] }));
+    add(sides, new THREE.MeshLambertMaterial({ map: tex[t.textures.basin], side: THREE.DoubleSide }));
+    add(lips, new THREE.MeshLambertMaterial({ map: tex[t.textures.floor], color: 0xe9ece6 }));
+
+    // 수면: 맵 전체를 덮지만 마른 바닥 아래로는 가려진다
+    const wg = new THREE.PlaneGeometry(W * S, H * S);
+    wg.rotateX(-Math.PI / 2);
+    wg.translate((W * S) / 2, WATER_Y, (H * S) / 2);
+    worldUV(wg, 1 / 3, 1 / 3);
+    this.waterMat = new THREE.MeshLambertMaterial({
+      map: tex.water,
+      color: 0x8fd0dc,
+      emissive: 0x0d3a44,
+      transparent: true,
+      opacity: 0.52,
+      depthWrite: false,
+    });
+    const wm = new THREE.Mesh(wg, this.waterMat);
+    wm.renderOrder = 1;
+    this.group.add(wm);
+
+    // 물결 고리 풀
+    const rg = new THREE.PlaneGeometry(1, 1);
+    rg.rotateX(-Math.PI / 2);
+    for (let i = 0; i < 32; i++) {
+      const m = new THREE.Mesh(
+        rg,
+        new THREE.MeshBasicMaterial({ map: tex.ripple, transparent: true, opacity: 0, depthWrite: false }),
+      );
+      m.renderOrder = 2;
+      m.visible = false;
+      this.group.add(m);
+      this.ripples.push({ m, life: 1, max: 1, size: 1, strength: 0 });
+    }
+  }
+
+  // 물 위에 퍼지는 물결 하나
+  ripple(x, z, size = 1, strength = 0.5) {
+    if (!this.ripples.length || !this.isWaterAt(x, z)) return;
+    let best = this.ripples[0];
+    for (const r of this.ripples) if (r.life / r.max > best.life / best.max) best = r;
+    best.m.position.set(x, WATER_Y + 0.01, z);
+    best.life = 0;
+    best.max = 1 + size * 0.5;
+    best.size = size;
+    best.strength = strength;
+    best.m.visible = true;
   }
 
   _buildClassroom() {
@@ -645,9 +830,10 @@ export class Level {
       const p = this._freeSpot(cell[0], cell[1], 0.45);
       if (!p) return false;
       const mesh = makeItem(type, this.tex);
-      mesh.position.set(p.x, 0.25, p.z);
+      const iy = this.groundAt(p.x, p.z) + 0.25;
+      mesh.position.set(p.x, iy, p.z);
       this.group.add(mesh);
-      this.items.push({ type, mesh, x: p.x, z: p.z, y: 0.25, taken: false, phase: r.next() * 10 });
+      this.items.push({ type, mesh, x: p.x, z: p.z, y: iy, taken: false, phase: r.next() * 10 });
       return true;
     };
 
@@ -691,6 +877,23 @@ export class Level {
   }
 
   update(time) {
+    const dt = Math.min(0.1, time - (this._lastT ?? time));
+    this._lastT = time;
+    if (this.waterMat) {
+      this.waterMat.map.offset.set(time * 0.018, time * 0.011);
+      for (const r of this.ripples) {
+        if (!r.m.visible) continue;
+        r.life += dt;
+        const k = r.life / r.max;
+        if (k >= 1) {
+          r.m.visible = false;
+          continue;
+        }
+        const sc = 0.3 + r.size * 2.2 * k;
+        r.m.scale.set(sc, 1, sc);
+        r.m.material.opacity = r.strength * (1 - k);
+      }
+    }
     for (const it of this.items) {
       if (it.taken || it.type === 'note') continue;
       it.mesh.position.y = it.y + Math.sin(time * 2 + it.phase) * 0.05;

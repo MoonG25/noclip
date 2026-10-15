@@ -78,6 +78,14 @@ export function makeItem(type, tex) {
     bit.position.set(0.09, -0.03, 0);
     g.add(ring, shaft, bit);
     glowColor = 0xffd27a;
+  } else if (type === 'token') {
+    // 탈의실 토큰: 구멍 뚫린 황동 동전
+    const brass = new THREE.MeshBasicMaterial({ color: 0xc8a560 });
+    const coin = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.022, 8, 18), brass);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.012, 18, 1, true), brass);
+    rim.rotation.x = Math.PI / 2;
+    g.add(coin, rim);
+    glowColor = 0xffe0a0;
   } else if (type === 'battery') {
     const body = new THREE.Mesh(
       new THREE.CylinderGeometry(0.035, 0.035, 0.13, 10),

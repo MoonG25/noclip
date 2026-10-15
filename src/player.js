@@ -4,6 +4,7 @@ const WALK = 2.6;
 const SPRINT = 5.0;
 const CROUCH = 1.3;
 const RADIUS = 0.32;
+const WADE = 0.62; // 물속에서는 이만큼 느려진다
 
 export class Player {
   constructor(camera) {
@@ -25,6 +26,8 @@ export class Player {
     this.sprinting = false;
     this.lit = 1;
     this.frozen = false;
+    this.groundY = 0;
+    this.inWater = false;
 
     this.flashlight = new THREE.SpotLight(0xfff1d6, 0, 24, 0.45, 0.6, 1.4);
     this.flashlight.position.set(0.12, -0.08, 0);
@@ -34,6 +37,8 @@ export class Player {
 
   reset(x, z, yaw) {
     this.pos.set(x, 0, z);
+    this.groundY = 0;
+    this.inWater = false;
     this.vel.set(0, 0);
     this.yaw = yaw;
     this.pitch = 0;
@@ -79,7 +84,8 @@ export class Player {
 
     const moving = fwd !== 0 || str !== 0;
     this.sprinting = !!(k.ShiftLeft || k.ShiftRight) && fwd > 0 && !this.exhausted && !crouching && moving;
-    const speed = crouching ? CROUCH : this.sprinting ? SPRINT : WALK;
+    this.inWater = !!(level.isWaterAt && level.isWaterAt(this.pos.x, this.pos.z));
+    const speed = (crouching ? CROUCH : this.sprinting ? SPRINT : WALK) * (this.inWater ? WADE : 1);
 
     const sy = Math.sin(this.yaw);
     const cy = Math.cos(this.yaw);
@@ -124,7 +130,10 @@ export class Player {
     const spd = moved / Math.max(dt, 1e-4);
     this.bob += moved * (Math.PI * 2) / (stride * 2);
     const amp = Math.min(1, spd / WALK) * (this.sprinting ? 0.07 : 0.035);
-    const eye = 1.62 - this.crouch * 0.6;
+    // 물에 들어가거나 나올 때 시점이 계단처럼 부드럽게 내려가고 올라간다
+    const ground = level.groundAt ? level.groundAt(this.pos.x, this.pos.z) : 0;
+    this.groundY += (ground - this.groundY) * Math.min(1, dt * 6);
+    const eye = this.groundY + 1.62 - this.crouch * 0.6;
     const pant = this.exhausted ? Math.sin(time * 9) * 0.012 : 0;
     this.camera.position.set(this.pos.x, eye + Math.abs(Math.sin(this.bob)) * amp + pant, this.pos.z);
     const roll = Math.sin(this.bob * 0.5) * amp * 0.25 + Math.sin(time * 0.6) * 0.004;

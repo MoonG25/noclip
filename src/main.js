@@ -4,6 +4,7 @@ import { Level, WALL } from './level.js';
 import { Player } from './player.js';
 import { Hound } from './entities/hound.js';
 import { Doll } from './entities/doll.js';
+import { Drowned } from './entities/drowned.js';
 import { LightRig } from './lights.js';
 import { AudioEngine } from './audio.js';
 import { VHS } from './vhs.js';
@@ -29,7 +30,7 @@ const vhs = new VHS(renderer);
 const lights = new LightRig(scene);
 const player = new Player(camera);
 // 레벨마다 다른 엔티티. 테마의 entity.kind 로 고른다
-const entities = { hound: new Hound(tex), doll: new Doll(tex) };
+const entities = { hound: new Hound(tex), doll: new Doll(tex), drowned: new Drowned(tex) };
 for (const e of Object.values(entities)) scene.add(e.mesh);
 let entity = entities.hound;
 const hud = new HUD();
@@ -367,7 +368,8 @@ function update(dt) {
   game.noise = Math.max(0, game.noise - dt * 1.2);
   for (const loud of steps) {
     game.noise = Math.max(game.noise, loud);
-    audio.footstep(lv.theme.surface, loud);
+    audio.footstep(lv.surfaceAt(player.pos.x, player.pos.z), loud);
+    lv.ripple(player.pos.x, player.pos.z, 0.5 + loud, 0.2 + loud * 0.4);
     entity.hear(player.pos.x, player.pos.z, loud * 17, lv);
   }
 

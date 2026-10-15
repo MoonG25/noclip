@@ -811,6 +811,178 @@ function houndSkin() {
   return c;
 }
 
+// ---------- LEVEL 2 · 풀룸 ----------
+// 작은 정사각 타일. size=타일 한 장(px), base=타일 색, grout=줄눈 색
+function tiles(S, n, base, grout, jitter, dirt) {
+  const [c, x] = canvas(S, S);
+  x.fillStyle = grout;
+  x.fillRect(0, 0, S, S);
+  const ts = S / n;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const v = (rng.next() - 0.5) * jitter;
+      x.fillStyle = `rgb(${base[0] + v},${base[1] + v},${base[2] + v})`;
+      x.fillRect(i * ts + 1.5, j * ts + 1.5, ts - 3, ts - 3);
+      // 유약 반사
+      x.fillStyle = 'rgba(255,255,255,0.08)';
+      x.fillRect(i * ts + 3, j * ts + 3, ts * 0.45, 2);
+    }
+  }
+  stains(x, S, S, dirt, '90,110,100', 60, 0.08);
+  grain(x, S, S, 8);
+  return c;
+}
+
+function water() {
+  const S = 256;
+  const [c, x] = canvas(S, S);
+  x.fillStyle = '#7fb7c2';
+  x.fillRect(0, 0, S, S);
+  // 물결 선 (위아래로 이어지도록 sin 주기를 맞춘다)
+  for (let k = 0; k < 26; k++) {
+    const y0 = rng.next() * S;
+    const amp = 3 + rng.next() * 6;
+    const ph = rng.next() * Math.PI * 2;
+    x.strokeStyle = `rgba(235,255,255,${0.12 + rng.next() * 0.22})`;
+    x.lineWidth = 1 + rng.next() * 2;
+    for (const oy of [-S, 0, S]) {
+      x.beginPath();
+      for (let px = 0; px <= S; px += 4) {
+        const py = y0 + oy + Math.sin((px / S) * Math.PI * 2 * 2 + ph) * amp;
+        if (px === 0) x.moveTo(px, py);
+        else x.lineTo(px, py);
+      }
+      x.stroke();
+    }
+  }
+  return c;
+}
+
+function ripple() {
+  const [c, x] = canvas(128, 128);
+  const g = x.createRadialGradient(64, 64, 40, 64, 64, 63);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.75, 'rgba(255,255,255,0.25)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 128, 128);
+  return c;
+}
+
+// 익사체 피부: 물에 불어 쭈글쭈글하고 푸르스름한 살갗
+function drownedSkin() {
+  const S = 256;
+  const [c, x] = canvas(S, S);
+  x.fillStyle = '#a9b5b0';
+  x.fillRect(0, 0, S, S);
+  stains(x, S, S, 10, '80,100,110', 46, 0.2);
+  stains(x, S, S, 6, '120,90,95', 30, 0.18);
+  x.lineWidth = 1;
+  for (let i = 0; i < 70; i++) {
+    x.strokeStyle = `rgba(${rng.next() > 0.5 ? '70,80,90' : '200,210,205'},0.25)`;
+    const y = rng.next() * S;
+    x.beginPath();
+    x.moveTo(0, y);
+    for (let px = 0; px <= S; px += 16) x.lineTo(px, y + (rng.next() - 0.5) * 6);
+    x.stroke();
+  }
+  for (let i = 0; i < 18; i++) {
+    x.strokeStyle = 'rgba(60,70,120,0.4)';
+    let px = rng.next() * S;
+    let py = rng.next() * S;
+    x.beginPath();
+    x.moveTo(px, py);
+    for (let k = 0; k < 6; k++) {
+      px += (rng.next() - 0.5) * 30;
+      py += (rng.next() - 0.5) * 30;
+      x.lineTo(px, py);
+    }
+    x.stroke();
+  }
+  grain(x, S, S, 18);
+  return c;
+}
+
+// 익사체 얼굴: 구의 등장방형 UV (얼굴 중심 u=0.25). 뿌옇게 흐린 눈, 축 늘어져 벌어진 입
+function drownedFace(scream) {
+  const W = 1024;
+  const H = 512;
+  const [c, x] = canvas(W, H);
+  const cx = 256;
+  const r = new RNG(31);
+  x.fillStyle = '#aab6b2';
+  x.fillRect(0, 0, W, H);
+  const shade = x.createRadialGradient(cx, 270, 60, cx, 270, 300);
+  shade.addColorStop(0, 'rgba(0,0,0,0)');
+  shade.addColorStop(1, 'rgba(40,55,65,0.5)');
+  x.fillStyle = shade;
+  x.fillRect(0, 0, W, H);
+  stains(x, W, H, 10, '70,90,110', 50, 0.16);
+  // 듬성듬성 들러붙은 젖은 머리카락
+  x.strokeStyle = 'rgba(20,22,24,0.85)';
+  for (let i = 0; i < 60; i++) {
+    const sx = 40 + r.next() * 440;
+    x.lineWidth = 1 + r.next() * 2;
+    x.beginPath();
+    x.moveTo(sx, 60 + r.next() * 30);
+    x.bezierCurveTo(sx + (r.next() - 0.5) * 30, 120, sx + (r.next() - 0.5) * 40, 160, sx + (r.next() - 0.5) * 50, 150 + r.next() * 60);
+    x.stroke();
+  }
+  for (const s of [-1, 1]) {
+    const ex = cx + s * 62;
+    const ey = 250;
+    const sock = x.createRadialGradient(ex, ey, 18, ex, ey, 58);
+    sock.addColorStop(0, 'rgba(40,40,60,0.6)');
+    sock.addColorStop(1, 'rgba(40,40,60,0)');
+    x.fillStyle = sock;
+    x.fillRect(ex - 60, ey - 60, 120, 120);
+    if (!scream) {
+      // 동공 없이 뿌연 우윳빛 눈
+      const g = x.createRadialGradient(ex - 4, ey - 4, 2, ex, ey, 26);
+      g.addColorStop(0, '#f4f6f0');
+      g.addColorStop(0.7, '#d4dad2');
+      g.addColorStop(1, '#8e9a96');
+      x.fillStyle = g;
+      x.beginPath();
+      x.ellipse(ex, ey, 28, 22, 0, 0, Math.PI * 2);
+      x.fill();
+      x.fillStyle = 'rgba(180,190,200,0.5)';
+      x.beginPath();
+      x.arc(ex + s * 2, ey + 2, 9, 0, Math.PI * 2);
+      x.fill();
+    } else {
+      x.fillStyle = '#e9ede6';
+      x.beginPath();
+      x.ellipse(ex, ey, 34, 30, 0, 0, Math.PI * 2);
+      x.fill();
+      x.fillStyle = '#0a0a0a';
+      x.beginPath();
+      x.arc(ex, ey + 1, 5, 0, Math.PI * 2);
+      x.fill();
+    }
+  }
+  // 입
+  const my = 360;
+  x.fillStyle = '#120a0b';
+  x.beginPath();
+  if (!scream) x.ellipse(cx, my, 30, 44, 0, 0, Math.PI * 2);
+  else x.ellipse(cx, my + 16, 58, 96, 0, 0, Math.PI * 2);
+  x.fill();
+  x.strokeStyle = 'rgba(80,60,70,0.7)';
+  x.lineWidth = 4;
+  x.stroke();
+  if (scream) {
+    x.fillStyle = '#c9c2a4';
+    for (let k = -3; k <= 3; k++) {
+      x.fillRect(cx + k * 13 - 4, my - 76 + Math.abs(k) * 5, 8, 14);
+      x.fillRect(cx + k * 13 - 4, my + 98 - Math.abs(k) * 5, 8, 12);
+    }
+  }
+  grain(x, W, H, 12);
+  return c;
+}
+
 function glow() {
   const [c, x] = canvas(128, 128);
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -870,6 +1042,14 @@ export function makeTextures(renderer) {
     houndSkin: toTex(houndSkin(), a),
     houndFace: toTex(houndFace(false), a, { repeat: false }),
     houndScream: toTex(houndFace(true), a, { repeat: false }),
+    poolTile: toTex(tiles(512, 10, [226, 232, 230], '#9fa9a6', 10, 3), a),
+    poolDeck: toTex(tiles(512, 5, [214, 218, 210], '#8f9690', 14, 5), a),
+    poolBasin: toTex(tiles(512, 10, [120, 186, 204], '#5f8e9a', 14, 4), a),
+    water: toTex(water(), a),
+    ripple: toTex(ripple(), a, { repeat: false }),
+    drownedSkin: toTex(drownedSkin(), a),
+    drownedFace: toTex(drownedFace(false), a, { repeat: false }),
+    drownedScream: toTex(drownedFace(true), a, { repeat: false }),
     glow: toTex(glow(), a, { repeat: false }),
     paper: toTex(paper(), a, { repeat: false }),
   };
