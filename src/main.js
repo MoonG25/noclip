@@ -477,7 +477,7 @@ function updateCaught(dt) {
   // 그것이 덮쳐 오는 자세를 잡고, 고개가 강제로 그것을 향한다
   entity.yaw = Math.atan2(player.pos.x - entity.pos.x, player.pos.z - entity.pos.z);
   entity.mesh.rotation.y = entity.yaw;
-  entity.jumpscarePose();
+  entity.jumpscarePose(camera);
   entity.mesh.updateMatrixWorld(true);
   entity.head.getWorldPosition(_head);
   const dx = _head.x - camera.position.x;
@@ -498,7 +498,8 @@ function updateCaught(dt) {
     entity.pos.z += ((player.pos.z - entity.pos.z) / toward) * dt * 3;
   }
   entity.syncMesh();
-  entity.head.lookAt(camera.position);
+  if (entity.faceCamera) entity.faceCamera(camera);
+  else entity.head.lookAt(camera.position);
   if (game.caughtT > 1.3) {
     setState('dead');
     unlockPointer();

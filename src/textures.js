@@ -874,7 +874,7 @@ function ripple() {
 function drownedSkin() {
   const S = 256;
   const [c, x] = canvas(S, S);
-  x.fillStyle = '#a9b5b0';
+  x.fillStyle = '#97a39f';
   x.fillRect(0, 0, S, S);
   stains(x, S, S, 10, '80,100,110', 46, 0.2);
   stains(x, S, S, 6, '120,90,95', 30, 0.18);
@@ -904,82 +904,112 @@ function drownedSkin() {
   return c;
 }
 
-// 익사체 얼굴: 구의 등장방형 UV (얼굴 중심 u=0.25). 뿌옇게 흐린 눈, 축 늘어져 벌어진 입
+// 익사체 얼굴: 구의 등장방형 UV (얼굴 중심 u=0.25). 머리가 거꾸로 매달리므로 화면에서는 뒤집혀 보인다.
+// 눈이 있어야 할 자리는 검게 꺼진 구멍, 입은 코 밑에서 턱까지 세로로 찢어져 있다
 function drownedFace(scream) {
   const W = 1024;
   const H = 512;
   const [c, x] = canvas(W, H);
   const cx = 256;
   const r = new RNG(31);
-  x.fillStyle = '#aab6b2';
+  x.fillStyle = '#9aa6a3';
   x.fillRect(0, 0, W, H);
-  const shade = x.createRadialGradient(cx, 270, 60, cx, 270, 300);
+  const shade = x.createRadialGradient(cx, 260, 50, cx, 260, 300);
   shade.addColorStop(0, 'rgba(0,0,0,0)');
-  shade.addColorStop(1, 'rgba(40,55,65,0.5)');
+  shade.addColorStop(1, 'rgba(25,35,45,0.6)');
   x.fillStyle = shade;
   x.fillRect(0, 0, W, H);
-  stains(x, W, H, 10, '70,90,110', 50, 0.16);
-  // 듬성듬성 들러붙은 젖은 머리카락
-  x.strokeStyle = 'rgba(20,22,24,0.85)';
-  for (let i = 0; i < 60; i++) {
-    const sx = 40 + r.next() * 440;
-    x.lineWidth = 1 + r.next() * 2;
+  stains(x, W, H, 12, '60,80,100', 50, 0.2);
+  stains(x, W, H, 6, '110,80,90', 30, 0.2);
+  // 비치는 핏줄
+  x.lineWidth = 1.5;
+  for (let i = 0; i < 40; i++) {
+    x.strokeStyle = `rgba(${r.next() > 0.5 ? '50,60,120' : '90,40,60'},0.45)`;
+    let px = r.next() * 520;
+    let py = r.next() * H;
     x.beginPath();
-    x.moveTo(sx, 60 + r.next() * 30);
-    x.bezierCurveTo(sx + (r.next() - 0.5) * 30, 120, sx + (r.next() - 0.5) * 40, 160, sx + (r.next() - 0.5) * 50, 150 + r.next() * 60);
+    x.moveTo(px, py);
+    for (let k = 0; k < 7; k++) {
+      px += (r.next() - 0.5) * 34;
+      py += (r.next() - 0.5) * 34;
+      x.lineTo(px, py);
+    }
     x.stroke();
   }
+  // 퀭하게 꺼진 눈구멍 (아주 작은 빛만 남아 있다)
   for (const s of [-1, 1]) {
-    const ex = cx + s * 62;
-    const ey = 250;
-    const sock = x.createRadialGradient(ex, ey, 18, ex, ey, 58);
-    sock.addColorStop(0, 'rgba(40,40,60,0.6)');
-    sock.addColorStop(1, 'rgba(40,40,60,0)');
-    x.fillStyle = sock;
-    x.fillRect(ex - 60, ey - 60, 120, 120);
-    if (!scream) {
-      // 동공 없이 뿌연 우윳빛 눈
-      const g = x.createRadialGradient(ex - 4, ey - 4, 2, ex, ey, 26);
-      g.addColorStop(0, '#f4f6f0');
-      g.addColorStop(0.7, '#d4dad2');
-      g.addColorStop(1, '#8e9a96');
-      x.fillStyle = g;
-      x.beginPath();
-      x.ellipse(ex, ey, 28, 22, 0, 0, Math.PI * 2);
-      x.fill();
-      x.fillStyle = 'rgba(180,190,200,0.5)';
-      x.beginPath();
-      x.arc(ex + s * 2, ey + 2, 9, 0, Math.PI * 2);
-      x.fill();
-    } else {
-      x.fillStyle = '#e9ede6';
-      x.beginPath();
-      x.ellipse(ex, ey, 34, 30, 0, 0, Math.PI * 2);
-      x.fill();
-      x.fillStyle = '#0a0a0a';
-      x.beginPath();
-      x.arc(ex, ey + 1, 5, 0, Math.PI * 2);
-      x.fill();
-    }
+    const ex = cx + s * 58;
+    const ey = 230;
+    const g = x.createRadialGradient(ex, ey, 2, ex, ey, 54);
+    g.addColorStop(0, 'rgba(2,2,4,1)');
+    g.addColorStop(0.45, 'rgba(10,8,12,0.95)');
+    g.addColorStop(0.75, 'rgba(40,40,55,0.5)');
+    g.addColorStop(1, 'rgba(40,40,55,0)');
+    x.fillStyle = g;
+    x.beginPath();
+    x.ellipse(ex, ey, 54, 46, s * 0.25, 0, Math.PI * 2);
+    x.fill();
+    x.fillStyle = scream ? 'rgba(255,255,255,0.95)' : 'rgba(220,230,220,0.6)';
+    x.beginPath();
+    x.arc(ex + s * 4, ey + 6, scream ? 4 : 2.5, 0, Math.PI * 2);
+    x.fill();
   }
-  // 입
-  const my = 360;
-  x.fillStyle = '#120a0b';
+  // 콧구멍만 남은 코
+  x.fillStyle = 'rgba(15,10,12,0.9)';
+  for (const s of [-1, 1]) {
+    x.beginPath();
+    x.ellipse(cx + s * 9, 300, 4, 9, s * 0.3, 0, Math.PI * 2);
+    x.fill();
+  }
+  // 세로로 찢어진 입: 가장자리에 이빨이 촘촘하다
+  const top = 318;
+  const bot = scream ? 500 : 440;
+  const half = scream ? 46 : 14;
+  x.fillStyle = '#4a1e24';
   x.beginPath();
-  if (!scream) x.ellipse(cx, my, 30, 44, 0, 0, Math.PI * 2);
-  else x.ellipse(cx, my + 16, 58, 96, 0, 0, Math.PI * 2);
+  x.ellipse(cx, (top + bot) / 2, half + 10, (bot - top) / 2 + 6, 0, 0, Math.PI * 2);
   x.fill();
-  x.strokeStyle = 'rgba(80,60,70,0.7)';
-  x.lineWidth = 4;
-  x.stroke();
-  if (scream) {
-    x.fillStyle = '#c9c2a4';
-    for (let k = -3; k <= 3; k++) {
-      x.fillRect(cx + k * 13 - 4, my - 76 + Math.abs(k) * 5, 8, 14);
-      x.fillRect(cx + k * 13 - 4, my + 98 - Math.abs(k) * 5, 8, 12);
-    }
+  x.fillStyle = '#070304';
+  x.beginPath();
+  x.moveTo(cx, top);
+  for (let k = 0; k <= 20; k++) {
+    const t = k / 20;
+    x.lineTo(cx + Math.sin(t * Math.PI) * half * (1 + (r.next() - 0.5) * 0.2), top + (bot - top) * t);
   }
-  grain(x, W, H, 12);
+  for (let k = 20; k >= 0; k--) {
+    const t = k / 20;
+    x.lineTo(cx - Math.sin(t * Math.PI) * half * (1 + (r.next() - 0.5) * 0.2), top + (bot - top) * t);
+  }
+  x.fill();
+  x.fillStyle = '#cfc6a6';
+  const n = scream ? 9 : 7;
+  for (let k = 0; k < n; k++) {
+    const t = (k + 0.5) / n;
+    const w = Math.sin(t * Math.PI) * half;
+    const y = top + (bot - top) * t;
+    const tl = scream ? 22 : 9;
+    x.beginPath();
+    x.moveTo(cx - w - 2, y - 6);
+    x.lineTo(cx - w + tl, y);
+    x.lineTo(cx - w - 2, y + 6);
+    x.fill();
+    x.beginPath();
+    x.moveTo(cx + w + 2, y - 6);
+    x.lineTo(cx + w - tl, y);
+    x.lineTo(cx + w + 2, y + 6);
+    x.fill();
+  }
+  // 정수리 쪽 젖은 머리카락 몇 가닥
+  x.strokeStyle = 'rgba(15,18,20,0.8)';
+  for (let i = 0; i < 40; i++) {
+    const sx = 60 + r.next() * 400;
+    x.lineWidth = 1 + r.next() * 1.5;
+    x.beginPath();
+    x.moveTo(sx, 40 + r.next() * 30);
+    x.bezierCurveTo(sx + (r.next() - 0.5) * 30, 90, sx + (r.next() - 0.5) * 40, 130, sx + (r.next() - 0.5) * 50, 120 + r.next() * 40);
+    x.stroke();
+  }
+  grain(x, W, H, 14);
   return c;
 }
 

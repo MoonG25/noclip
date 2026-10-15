@@ -1,13 +1,25 @@
 // LEVEL 2 · 익사체
-// 물에 불어 푸르스름한 몸. 평소엔 수영장 바닥에 엎드려 미끄러지듯 헤엄친다.
+// 뼈만 남은 창백한 몸이 배를 위로 한 채 팔다리를 뒤로 꺾어 거미처럼 수영장 바닥을 긴다.
+// 비정상적으로 긴 목 끝에 머리가 거꾸로 매달려 있고, 입은 세로로 찢어져 있다.
+// 몸은 물에 잠겨 있고 높이 솟은 팔꿈치와 무릎만 수면을 뚫고 나온다.
 // 물속에서만 움직이고, 눈 대신 물의 떨림으로 사냥한다. 물 밖으로는 나오지 않지만
-// 물가까지 따라와 몸을 일으키고 기다린다. 가장자리에 너무 붙어 서 있으면 끌고 들어간다.
+// 물가까지 따라와 허리를 뒤로 꺾은 채 솟아올라 기다린다. 가장자리에 너무 붙어 서 있으면 끌고 들어간다.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EntityBase, WANDER, CHASE, SEARCH } from './base.js';
 import { POOL_FLOOR } from '../level.js';
 
 const WAIT = 'wait';
 const _v = new THREE.Vector3();
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// 팔다리 자세(라디안). 기는 자세: 관절이 몸보다 높이 솟는다 / 선 자세: 팔을 앞으로 뻗는다
+const ARM_CRAWL = { up: 2.3, low: -2.05 };
+const ARM_REACH = { up: 0.3, low: -0.15 };
+const LEG = { up: 2.25, low: -2.0 };
+const H_CRAWL = 0.42; // 기어갈 때 골반 높이 (수영장 바닥 기준)
+const H_RISE = 1.1; // 일어서면 골반이 수면 위로 올라온다
+const RISE = 1.42; // 몸통을 거의 수직으로 세운다
 
 export class Drowned extends EntityBase {
   get awakeMessage() {
@@ -20,9 +32,12 @@ export class Drowned extends EntityBase {
 
   _build(tex) {
     const g = new THREE.Group();
-    const skin = new THREE.MeshLambertMaterial({ map: tex.drownedSkin, emissive: 0x0c1418 });
+    const skin = new THREE.MeshLambertMaterial({ map: tex.drownedSkin, emissive: 0x0a1014 });
+    const bone = new THREE.MeshLambertMaterial({ map: tex.drownedSkin, color: 0xd8dcd4 });
+    const nail = new THREE.MeshLambertMaterial({ color: 0x1c1a1a });
     this.skinMat = skin;
-    this.faceMat = new THREE.MeshLambertMaterial({ map: tex.drownedFace, emissive: 0x141c1e });
+    this.boneMat = bone;
+    this.faceMat = new THREE.MeshLambertMaterial({ map: tex.drownedFace, emissive: 0x0e1416 });
     const add = (parent, geo, mat, x = 0, y = 0, z = 0) => {
       const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
@@ -35,52 +50,108 @@ export class Drowned extends EntityBase {
       parent.add(p);
       return p;
     };
-    // 골반이 원점. body를 x축으로 눕히면 엎드려 헤엄치는 자세가 된다
-    const body = pivot(g, 0, 0, 0);
-    this.body = body;
-    add(body, new THREE.CapsuleGeometry(0.16, 0.42, 4, 10), skin, 0, 0.4, 0).scale.set(1, 1, 0.78);
-    add(body, new THREE.SphereGeometry(0.17, 10, 8), skin, 0, 0.12, 0.02).scale.set(1, 0.7, 0.85); // 부풀어 오른 배
-    add(body, new THREE.CylinderGeometry(0.05, 0.065, 0.16, 8), skin, 0, 0.78, 0);
-    const head = pivot(body, 0, 0.93, 0.01);
-    add(head, new THREE.SphereGeometry(0.135, 22, 14), this.faceMat).scale.set(0.92, 1.18, 1);
-    this.head = head;
+    // 팔다리 한 마디: 피벗 아래(-y)로 뻗는다
+    const seg = (parent, len, r0, r1) => {
+      add(parent, new THREE.CylinderGeometry(r0, r1, len, 7), skin, 0, -len / 2, 0);
+      add(parent, new THREE.SphereGeometry(r0 * 1.25, 7, 5), bone); // 툭 튀어나온 관절
+      return pivot(parent, 0, -len, 0);
+    };
+    const hand = (parent, long) => {
+      add(parent, new THREE.SphereGeometry(0.035, 7, 5), skin).scale.set(1.3, 0.6, 1);
+      for (let f = -2; f <= 2; f++) {
+        const len = long * (1 - Math.abs(f) * 0.12);
+        const fg = pivot(parent, f * 0.016, -0.01, 0.02);
+        fg.rotation.set(1.35, 0, f * 0.28);
+        add(fg, new THREE.CylinderGeometry(0.007, 0.004, len, 5), skin, 0, -len / 2, 0);
+        add(fg, new THREE.ConeGeometry(0.006, 0.02, 4), nail, 0, -len - 0.008, 0).rotation.x = Math.PI;
+      }
+    };
 
-    // 팔: 무릎까지 내려오는 길고 가는 팔, 물갈퀴처럼 벌어진 손가락
+    // 몸통: 골반에서 앞(+z)으로 누운 채, 배가 위(+y)를 향한다. torso를 x축으로 젖히면 일어선다
+    const torso = pivot(g, 0, 0, 0);
+    this.torso = torso;
+    const trunk = add(torso, new THREE.CapsuleGeometry(0.095, 0.5, 4, 10), skin, 0, 0, 0.3);
+    trunk.rotation.x = Math.PI / 2;
+    trunk.scale.set(1.15, 1, 0.8);
+    add(torso, new THREE.SphereGeometry(0.1, 9, 7), skin, 0, -0.01, -0.02).scale.set(1.2, 0.7, 0.9); // 골반
+    // 배 쪽(위)으로 드러난 갈비뼈
+    for (let i = 0; i < 6; i++) {
+      const rib = add(torso, new THREE.TorusGeometry(0.098, 0.011, 4, 12, Math.PI), bone, 0, 0.0, 0.26 + i * 0.055);
+      rib.scale.set(1.18, 1.05, 1);
+    }
+    add(torso, new THREE.SphereGeometry(0.06, 7, 5), bone, 0, 0.05, 0.58).scale.set(1.6, 0.5, 0.8); // 쇄골
+
+    // 길게 늘어진 목: 가슴 끝에서 앞으로 나가 아래로 휜다. 머리는 거꾸로 매달린다
+    const neckPts = [
+      new THREE.Vector3(0, 0.0, 0.58),
+      new THREE.Vector3(0, -0.02, 0.76),
+      new THREE.Vector3(0, -0.1, 0.92),
+      new THREE.Vector3(0, -0.22, 1.0),
+    ];
+    add(torso, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(neckPts), 16, 0.038, 7), skin);
+    for (let i = 1; i < 4; i++) add(torso, new THREE.SphereGeometry(0.03, 6, 4), bone, neckPts[i].x, neckPts[i].y + 0.03, neckPts[i].z);
+    const head = pivot(torso, 0, -0.31, 1.04);
+    add(head, new THREE.SphereGeometry(0.12, 22, 14), this.faceMat).scale.set(0.82, 1.3, 0.92);
+    this.head = head;
+    this.hair = this._hair(head);
+
+    // 팔: 어깨에서 바깥·위로 솟았다가 긴 아래팔이 바닥을 짚는다 (거미 다리처럼)
     this.arms = [];
     for (const s of [-1, 1]) {
-      const sh = pivot(body, s * 0.21, 0.7, 0);
-      add(sh, new THREE.SphereGeometry(0.06, 8, 6), skin);
-      add(sh, new THREE.CylinderGeometry(0.045, 0.038, 0.4, 8), skin, 0, -0.2, 0);
-      const el = pivot(sh, 0, -0.4, 0);
-      add(el, new THREE.CylinderGeometry(0.036, 0.028, 0.42, 8), skin, 0, -0.21, 0);
-      const hand = pivot(el, 0, -0.43, 0);
-      add(hand, new THREE.SphereGeometry(0.04, 8, 6), skin).scale.set(0.9, 0.6, 1.2);
-      for (let f = -2; f <= 2; f++) {
-        const fg = add(hand, new THREE.CylinderGeometry(0.008, 0.005, 0.13, 5), skin, f * 0.014, -0.07, 0.01);
-        fg.rotation.z = f * 0.12;
-      }
-      this.arms.push({ sh, el });
+      const sh = pivot(torso, s * 0.17, 0.0, 0.52);
+      const el = seg(sh, 0.44, 0.032, 0.026);
+      const wr = seg(el, 0.66, 0.026, 0.018);
+      hand(wr, 0.15);
+      this.arms.push({ sh, el, s });
     }
-    // 다리
+    // 다리: 골반에 붙어 몸통이 일어서도 바닥에 남는다
     this.legs = [];
     for (const s of [-1, 1]) {
-      const hip = pivot(body, s * 0.1, 0, 0);
-      add(hip, new THREE.CylinderGeometry(0.065, 0.05, 0.46, 8), skin, 0, -0.23, 0);
-      const kn = pivot(hip, 0, -0.46, 0);
-      add(kn, new THREE.CylinderGeometry(0.05, 0.035, 0.44, 8), skin, 0, -0.22, 0);
-      add(kn, new THREE.SphereGeometry(1, 8, 5), skin, 0, -0.46, 0.04).scale.set(0.045, 0.03, 0.1);
-      this.legs.push({ hip, kn });
+      const hip = pivot(g, s * 0.11, 0, 0.02);
+      const kn = seg(hip, 0.48, 0.04, 0.03);
+      const an = seg(kn, 0.68, 0.03, 0.02);
+      hand(an, 0.11);
+      this.legs.push({ hip, kn, s });
     }
+    g.scale.setScalar(1.08);
     return g;
+  }
+
+  // 젖어서 뭉친 긴 머리카락. 머리 기준 위(+y)로 뻗게 두면, 머리가 거꾸로 매달릴 때 아래로 늘어진다
+  _hair(head) {
+    const geos = [];
+    const up = new THREE.Vector3(0, 1, 0);
+    const q = new THREE.Quaternion();
+    for (let i = 0; i < 70; i++) {
+      const phi = Math.random() * Math.PI * 2;
+      const theta = Math.random() * 0.55;
+      const root = new THREE.Vector3(Math.sin(theta) * Math.cos(phi) * 0.098, Math.cos(theta) * 0.152, Math.sin(theta) * Math.sin(phi) * 0.11);
+      // 얼굴 앞쪽은 짧게, 뒤쪽은 길게
+      const back = Math.sin(phi) < 0 ? 1 : 0.55;
+      const len = (0.32 + Math.random() * 0.42) * back;
+      const dir = up
+        .clone()
+        .add(new THREE.Vector3(root.x * 2.2 + (Math.random() - 0.5) * 0.25, 0, root.z * 2.2 + (Math.random() - 0.5) * 0.25))
+        .normalize();
+      const geo = new THREE.CylinderGeometry(0.004 + Math.random() * 0.006, 0.0012, len, 3, 1);
+      geo.translate(0, len / 2, 0);
+      geo.applyQuaternion(q.setFromUnitVectors(up, dir));
+      geo.translate(root.x, root.y, root.z);
+      geos.push(geo);
+    }
+    const m = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshLambertMaterial({ color: 0x0c0d0e }));
+    geos.forEach((g) => g.dispose());
+    head.add(m);
+    return m;
   }
 
   setScream(on) {
     this.faceMat.map = on ? this.tex.drownedScream : this.tex.drownedFace;
   }
 
-  // 위치는 수영장 바닥 기준. 몸을 얼마나 일으켰는지에 따라 높이가 달라진다
+  // 위치는 수영장 바닥 기준. 몸을 얼마나 일으켰는지에 따라 골반 높이가 달라진다
   syncMesh() {
-    this.mesh.position.set(this.pos.x, POOL_FLOOR + 0.24 + (this.upright || 0) * 0.68, this.pos.z);
+    this.mesh.position.set(this.pos.x, POOL_FLOOR + lerp(H_CRAWL, H_RISE, this.upright || 0) + (this.lungeY || 0), this.pos.z);
   }
 
   reset(level, theme) {
@@ -91,6 +162,10 @@ export class Drowned extends EntityBase {
     this.rippleT = 0;
     this.relocate = null;
     this.huntTarget = null;
+    this.poseT = 0;
+    this.twitch = 0;
+    this.lungeY = 0;
+    this.faceMat.emissive.setHex(0x0e1416);
     this.setScream(false);
   }
 
@@ -255,10 +330,8 @@ export class Drowned extends EntityBase {
     if (this.rippleT <= 0) {
       const hunt = this.state === CHASE;
       if (moving) {
-        this.rippleT = hunt ? 0.16 : 0.32;
-        const hx = this.pos.x + Math.sin(this.yaw) * 0.6;
-        const hz = this.pos.z + Math.cos(this.yaw) * 0.6;
-        level.ripple(hx, hz, hunt ? 1.1 : 0.8, hunt ? 0.6 : 0.35);
+        this.rippleT = hunt ? 0.08 : 0.16;
+        this._jointRipple(level, hunt ? 0.6 : 0.4);
       } else if (this.upright > 0.5) {
         this.rippleT = 0.9;
         level.ripple(this.pos.x, this.pos.z, 1.2, 0.45);
@@ -271,49 +344,103 @@ export class Drowned extends EntityBase {
     return this._flush(ev);
   }
 
-  jumpscarePose() {
+  // 거꾸로 뒤집힌 얼굴로 플레이어를 노려본다
+  faceCamera(camera, twitch = 0) {
+    this.head.lookAt(camera.getWorldPosition(_v));
+    this.head.rotateZ(Math.PI + 0.3 + twitch);
+  }
+
+  // 덮칠 때는 몸을 앞으로 기울여 얼굴을 카메라 눈높이로 들이민다
+  jumpscarePose(camera) {
     this.upright = 1;
     this.setScream(true);
-    this.syncMesh();
-    this.body.rotation.x = 0.45;
-    for (const a of this.arms) {
-      a.sh.rotation.x = -1.45;
-      a.el.rotation.x = -0.2;
+    this.faceMat.emissive.setHex(0x3c4448);
+    this.torso.rotation.set(-0.8, 0, 0);
+    if (camera && !this.lungeY) {
+      this.syncMesh();
+      this.mesh.updateMatrixWorld(true);
+      this.head.getWorldPosition(_v);
+      this.lungeY = camera.position.y - 0.05 - _v.y;
     }
+    this.syncMesh();
+    if (camera) {
+      // 얼굴이 카메라에 파묻히지 않도록 60cm 앞에 멈춘다
+      this.mesh.updateMatrixWorld(true);
+      this.head.getWorldPosition(_v);
+      const c = camera.position;
+      const hd = Math.hypot(_v.x - c.x, _v.z - c.z);
+      if (hd < 0.6) {
+        const dx = this.pos.x - c.x;
+        const dz = this.pos.z - c.z;
+        const l = Math.hypot(dx, dz) || 1;
+        this.pos.x += (dx / l) * (0.6 - hd);
+        this.pos.z += (dz / l) * (0.6 - hd);
+        this.syncMesh();
+      }
+    }
+    for (const l of this.legs) {
+      l.hip.rotation.set(0, 0, l.s * 0.22);
+      l.kn.rotation.set(0, 0, -l.s * 0.3);
+    }
+    for (const a of this.arms) {
+      a.sh.rotation.set(0, 0, a.s * 0.5);
+      a.el.rotation.set(0, 0, -a.s * 0.25);
+    }
+  }
+
+  // 관절 위치에서 물결을 일으킨다 (기어갈 때 수면을 뚫고 나온 팔꿈치·무릎)
+  _jointRipple(level, strength) {
+    const limbs = [...this.arms.map((a) => a.el), ...this.legs.map((l) => l.kn)];
+    const j = limbs[Math.floor(Math.random() * limbs.length)];
+    j.getWorldPosition(_v);
+    level.ripple(_v.x, _v.z, 0.55, strength);
   }
 
   _animate(dt, time, moving, camera) {
     const u = this.upright;
     const hunt = this.state === CHASE;
-    // 물속에서는 검은 그림자, 몸을 일으키면 창백한 살갗이 드러난다
-    const shade = 0.12 + 0.88 * Math.min(1, u * 1.4);
-    this.skinMat.color.setScalar(shade);
-    this.faceMat.color.setScalar(shade);
     this.setScream(hunt && u > 0.5);
-    this.walk += this.speed * dt * 2;
-    const w = this.walk;
-    const k = moving ? 1 : 0.25;
-    this.mesh.position.set(this.pos.x, POOL_FLOOR + 0.24 + u * 0.68 + Math.sin(time * 1.3) * 0.02 * (1 - u), this.pos.z);
+    // 물속에서는 검은 그림자, 몸을 일으키면 창백한 살갗이 드러난다
+    const shade = 0.1 + 0.9 * Math.min(1, u * 1.4);
+    this.skinMat.color.setScalar(shade);
+    this.boneMat.color.setScalar(shade * 0.95);
+    this.faceMat.color.setScalar(shade);
+    this.walk += this.speed * dt * 3.2;
+
+    // 스톱모션: 자세는 초당 12~18번만 바뀐다. 사이사이 경련
+    this.poseT -= dt;
+    if (this.poseT > 0) return;
+    this.poseT = hunt ? 0.055 : 0.085;
+    if (Math.random() < (hunt ? 0.12 : 0.04)) this.twitch = (Math.random() - 0.5) * 1.4;
+    else this.twitch *= 0.4;
+
+    this.syncMesh();
+    this.mesh.position.y += Math.abs(Math.sin(this.walk)) * 0.025 * (1 - u);
+    this.hair.rotation.set(Math.sin(time * 1.3) * 0.05, 0, Math.sin(time * 1.1) * 0.06);
     this.mesh.rotation.y = this.yaw;
-    // 엎드림(π/2) ↔ 일어섬(살짝 앞으로 기울어짐)
-    this.body.rotation.set(Math.PI / 2 - 0.04 + (0.12 - (Math.PI / 2 - 0.04)) * u, 0, Math.sin(w) * 0.12 * k * (1 - u));
-    for (let i = 0; i < 2; i++) {
-      const s = i ? 1 : -1;
-      const a = this.arms[i];
-      // 헤엄칠 땐 몸에 붙여 뒤로 흐르고, 서면 축 늘어진다. 쫓아올 땐 앞으로 뻗는다
-      const swim = Math.sin(w + i * Math.PI) * 0.25 * k;
-      const reach = hunt ? -1.3 : 0;
-      a.sh.rotation.x = swim * (1 - u) + reach * u;
-      a.sh.rotation.z = s * (0.08 + 0.1 * (1 - u));
-      a.el.rotation.x = -0.25 * u;
-      const l = this.legs[i];
-      l.hip.rotation.x = Math.sin(w * 1.6 + i * Math.PI) * 0.35 * k * (1 - u);
-      l.kn.rotation.x = Math.max(0, Math.sin(w * 1.6 + i * Math.PI)) * 0.5 * k * (1 - u);
+    this.torso.rotation.set(-RISE * u, 0, Math.sin(this.walk * 0.5) * 0.05 * (1 - u));
+    const k = moving ? 1 : 0.15;
+    const w = this.walk;
+    // 대각선 다리끼리 같이 움직인다. 앞으로 내딛는 다리는 관절이 더 높이 들린다
+    this.arms.forEach((a, i) => {
+      const ph = w + (i ? Math.PI : 0);
+      const swing = Math.sin(ph) * 0.45 * k * (1 - u);
+      const lift = Math.max(0, Math.cos(ph)) * 0.25 * k * (1 - u);
+      a.sh.rotation.set(0, swing * a.s, a.s * lerp(ARM_CRAWL.up - lift, ARM_REACH.up, u));
+      a.el.rotation.set(0, 0, a.s * lerp(ARM_CRAWL.low + lift * 0.6, ARM_REACH.low, u));
+      if (u > 0.5) a.sh.rotation.x = Math.sin(time * 7 + i) * 0.08; // 뻗은 손끝이 떨린다
+    });
+    this.legs.forEach((l, i) => {
+      const ph = w + (i ? 0 : Math.PI);
+      const swing = Math.sin(ph) * 0.4 * k * (1 - u);
+      const lift = Math.max(0, Math.cos(ph)) * 0.22 * k * (1 - u);
+      // 일어서면 다리를 아래로 뻗어 수영장 바닥을 딛는다
+      l.hip.rotation.set(-0.35 * (1 - u), swing * l.s, l.s * lerp(LEG.up - lift, 0.22, u));
+      l.kn.rotation.set(0, 0, l.s * lerp(LEG.low + lift * 0.6, -0.3, u));
+    });
+    if (u > 0.4) this.faceCamera(camera, this.twitch); else {
+      // 기어갈 땐 거꾸로 매달린 채 앞을 향하고, 좌우로 까딱인다
+      this.head.rotation.set(0.15, Math.sin(time * 1.7) * 0.25 + this.twitch * 0.3, Math.PI + this.twitch);
     }
-    if (u > 0.4) {
-      // 몸을 일으키면 고개를 꺾어 플레이어를 노려본다
-      this.head.lookAt(camera.getWorldPosition(_v));
-      this.head.rotateZ(0.35 + Math.sin(time * 0.8) * 0.08 + (Math.random() < 0.03 ? (Math.random() - 0.5) * 0.8 : 0));
-    } else this.head.rotation.set(-1.2 * (1 - u), Math.sin(time * 0.9) * 0.2, 0);
   }
 }
