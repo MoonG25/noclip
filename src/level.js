@@ -530,7 +530,10 @@ export class Level {
       floor.rotateX(-Math.PI / 2);
       floor.translate((W * S) / 2, 0, (H * S) / 2);
       worldUV(floor, t.uv.floor, t.uv.floor);
-      this.group.add(new THREE.Mesh(floor, new THREE.MeshLambertMaterial({ map: tex[t.textures.floor] })));
+      const floorMat = t.floorShine
+        ? new THREE.MeshPhongMaterial({ map: tex[t.textures.floor], shininess: t.floorShine, specular: 0x6e6448 })
+        : new THREE.MeshLambertMaterial({ map: tex[t.textures.floor] });
+      this.group.add(new THREE.Mesh(floor, floorMat));
     }
     const ceil = new THREE.PlaneGeometry(W * S, H * S);
     ceil.rotateX(Math.PI / 2);

@@ -486,8 +486,11 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     const v = 0.08 + loud * 0.22;
     const out = this.sfx;
-    if (surface === 'carpet') {
-      this._noiseHit(out, t, { freq: 380 + Math.random() * 120, gain: v, decay: 0.09 });
+    if (surface === 'vinyl') {
+      // 장판: 발바닥이 쩍 달라붙었다 떨어지는 소리
+      this._noiseHit(out, t, { freq: 900 + Math.random() * 200, type: 'bandpass', q: 1.1, gain: v * 0.9, decay: 0.05 });
+      this._noiseHit(out, t + 0.04, { freq: 2400 + Math.random() * 400, type: 'bandpass', q: 3, gain: v * 0.3, decay: 0.025 });
+      this._tone(out, t, { f0: 110 + Math.random() * 20, f1: 60, gain: v * 0.35, decay: 0.06 });
     } else if (surface === 'water') {
       // 첨벙: 물을 가르는 쉭 소리 + 물방울 튀는 소리
       this._noiseHit(out, t, { freq: 700 + Math.random() * 300, type: 'bandpass', q: 0.7, gain: v * 1.3, decay: 0.22 + loud * 0.15 });
@@ -524,7 +527,7 @@ export class AudioEngine {
       return;
     }
     if (this.kind === 'hound') {
-      // 맨살이 카펫을 짚는 둔탁한 소리와 손톱 긁는 소리
+      // 맨살이 바닥을 짚는 둔탁한 소리와 손톱 긁는 소리
       const v = chasing ? 0.9 : 0.4;
       this._noiseHit(this.entityBus, t, { freq: 260, gain: v, decay: chasing ? 0.09 : 0.12 });
       this._noiseHit(this.entityBus, t + 0.03, { freq: 1500, type: 'bandpass', q: 2, gain: v * 0.25, decay: 0.03 });

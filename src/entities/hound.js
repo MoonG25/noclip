@@ -80,7 +80,7 @@ function limb(profile) {
 
 export class Hound extends EntityBase {
   get awakeMessage() {
-    return '…어딘가에서 무언가가 카펫을 긁으며 기어 다니기 시작했다';
+    return '…어딘가에서 무언가가 장판을 긁으며 기어 다니기 시작했다';
   }
 
   _build(tex) {

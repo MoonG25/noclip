@@ -89,20 +89,23 @@ function wallpaper() {
   return c;
 }
 
-function carpet() {
+// 노란 장판: 얼룩 없이 고른 색, 아주 고운 표면 결, 장판 이음매만 희미하게 (2m 한 장)
+function vinyl() {
   const S = 512;
   const [c, x] = canvas(S, S);
-  x.fillStyle = '#9a8748';
+  x.fillStyle = '#d6b55a';
   x.fillRect(0, 0, S, S);
-  // 카펫 섬유 느낌의 짧은 선
-  for (let i = 0; i < 16000; i++) {
-    const v = rng.next();
-    x.fillStyle = v > 0.5 ? 'rgba(190,170,100,0.25)' : 'rgba(70,58,25,0.25)';
-    x.fillRect(rng.next() * S, rng.next() * S, 1 + rng.next() * 2, 1);
+  // 한지처럼 고운 결 (거의 보이지 않을 정도)
+  for (let i = 0; i < 9000; i++) {
+    x.fillStyle = rng.next() > 0.5 ? 'rgba(240,215,130,0.12)' : 'rgba(150,120,50,0.1)';
+    x.fillRect(rng.next() * S, rng.next() * S, 1 + rng.next() * 4, 1);
   }
-  stains(x, S, S, 6, '60,50,20', 120, 0.1);
-  stains(x, S, S, 4, '40,36,18', 60, 0.12);
-  grain(x, S, S, 30);
+  grain(x, S, S, 6);
+  // 장판 이음매
+  x.fillStyle = 'rgba(120,95,40,0.35)';
+  x.fillRect(0, 0, 2, S);
+  x.fillStyle = 'rgba(255,240,190,0.25)';
+  x.fillRect(2, 0, 1, S);
   return c;
 }
 
@@ -1055,7 +1058,7 @@ export function makeTextures(renderer) {
   const a = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   return {
     wallpaper: toTex(wallpaper(), a),
-    carpet: toTex(carpet(), a),
+    vinyl: toTex(vinyl(), a),
     ceiling: toTex(ceiling(), a),
     panel: toTex(panel(), a, { repeat: false }),
     cinder: toTex(cinder(), a),

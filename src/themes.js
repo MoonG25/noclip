@@ -18,9 +18,10 @@ export const LEVELS = [
     fog: { color: 0x4a3f1c, near: 3, far: 34 },
     ambient: { sky: 0xfff0b0, ground: 0x9a8a58, intensity: 1.15 },
     exposure: 1.0,
-    textures: { wall: 'wallpaper', floor: 'carpet', ceil: 'ceiling' },
+    textures: { wall: 'wallpaper', floor: 'vinyl', ceil: 'ceiling' },
+    floorShine: 18, // 장판은 형광등 빛을 은은하게 반사한다
     uv: { wall: 0.5, floor: 0.5, ceil: 1 / 1.2 },
-    surface: 'carpet',
+    surface: 'vinyl',
     furniture: 'none',
     goal: { item: 'fuse', name: '퓨즈', count: 3 },
     pickups: { battery: 2, water: 2 },
@@ -41,11 +42,11 @@ export const LEVELS = [
     tape: {
       label: '로비 — 96.10.15',
       cover: 'assets/tape-0.jpg',
-      desc: '젖은 카펫과 끝없이 이어지는 노란 방. 비상구 전원을 켤 퓨즈 3개.',
+      desc: '누런 장판과 끝없이 이어지는 노란 방. 비상구 전원을 켤 퓨즈 3개.',
       threat: '하운드 — 눈이 없다. 소리로 사냥한다',
     },
     notes: [
-      '1996. 10. 14\n\n보일러실 벽에 손을 짚었는데 그대로 빠져버렸다.\n여기 카펫은 늘 젖어 있다. 곰팡이 냄새가 난다.\n형광등 소리가 머리를 울린다.',
+      '1996. 10. 14\n\n보일러실 벽에 손을 짚었는데 그대로 빠져버렸다.\n여기 장판은 늘 눅눅하다. 발바닥이 쩍쩍 달라붙는다.\n형광등 소리가 머리를 울린다.',
       '형광등이 깜빡이기 시작하면 그 자리에서 멀어져라.\n그게 근처에 있다는 뜻이다.\n\n불빛은 그걸 싫어하는 게 아니다.\n그게 지나가면 불이 버티질 못하는 거다.',
       '비상구 옆 배전함에 퓨즈 세 개.\n전원이 들어오면 문이 열린다.\n\n나는 두 개밖에 못 찾았다.\n세 번째를 찾으러 가는 길이다.\n이 쪽지를 보면 나보다 빨리 움직여.',
       '뛰지 마. 되도록 걷지도 마.\n그건 눈이 없다. 대신 귀가 아주 좋다.\n\n가까이서 숨소리가 들리면\n웅크리고, 움직이지 말고, 숨을 참아라.',
