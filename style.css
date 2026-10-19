@@ -1190,3 +1190,8 @@ body {
   background: rgba(255, 143, 134, 0.7);
   clip-path: polygon(0 8%, 4% 0, 96% 6%, 100% 0, 99% 92%, 95% 100%, 3% 94%, 0 100%);
 }
+
+/* 시작 화면 점프스케어: 덮치는 순간 메뉴가 사라진다 */
+body.scare .screen.menu {
+  visibility: hidden;
+}

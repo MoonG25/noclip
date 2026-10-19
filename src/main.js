@@ -57,6 +57,9 @@ const game = {
   menuGlitch: 0,
   target: null,
   powerQ: [], // 차단기를 올린 뒤 차례로 켜질 등
+  idleT: 0, // 시작 화면에서 아무 입력 없이 지난 시간
+  scare: null, // 시작 화면 점프스케어 진행 상태
+  scared: false,
 };
 
 // 설정: 감도·음량·밝기. 타이틀과 일시정지 화면의 슬라이더가 같은 값을 공유한다
@@ -179,6 +182,7 @@ function ensureAudio() {
 const progress = loadProgress();
 
 function startGame(index = defaultTape()) {
+  if (game.scare) endTitleScare(false);
   ensureAudio();
   menu.hide();
   game.elapsed = 0;
@@ -376,10 +380,13 @@ function update(dt) {
       const c = best ? { x: (best.x0 + best.w / 2) * lv.S, z: (best.y0 + best.h / 2) * lv.S } : lv.center(...lv.spawnCell);
       game.titleView = { level: lv, x: c.x, z: c.z };
     }
+    const sc = game.scare;
     camera.position.set(game.titleView.x, 1.55, game.titleView.z);
-    camera.rotation.set(Math.sin(game.time * 0.1) * 0.04, game.time * 0.045 + 0.6, 0);
+    if (sc) camera.rotation.set(sc.pitch, sc.yaw, 0);
+    else camera.rotation.set(Math.sin(game.time * 0.1) * 0.04, game.time * 0.045 + 0.6, 0);
+    updateTitleScare(dt);
     lights.update(dt, game.time, camera.position, entity);
-    vhs.uniforms.fade.value = 0.62;
+    vhs.uniforms.fade.value = game.scare ? game.scare.fade : 0.62;
     vhs.uniforms.stress.value = 0;
     vhs.uniforms.glitch.value = Math.max(game.glitch, game.menuGlitch);
     return;
@@ -525,6 +532,140 @@ function update(dt) {
     noise: game.noise,
     micOn: !!audio.mic,
   });
+}
+
+// ---------- 시작 화면 점프스케어 ----------
+// 시작 화면을 가만히 보고 있으면, 불이 깜빡일 때마다 방 저편의 그것이 조금씩 가까워지다가 화면으로 덮쳐 온다
+const IDLE_FIRST = 40;
+const IDLE_AGAIN = 150;
+
+function updateTitleScare(dt) {
+  if (!game.scare) {
+    if (!menu.open || menu.current !== 'title' || document.hidden || entity !== entities.hound) {
+      game.idleT = 0;
+      return;
+    }
+    game.idleT += dt;
+    if (game.idleT > (game.scared ? IDLE_AGAIN : IDLE_FIRST)) startTitleScare();
+    return;
+  }
+  const sc = game.scare;
+  const e = entity;
+  sc.t += dt;
+  const t = sc.t;
+  const at = (step, time) => sc.step === step && t >= time;
+  if (at(0, 0)) {
+    lights.flash(0.35);
+    sc.step = 1;
+  } else if (at(1, 0.35)) {
+    placeTitleEntity(10);
+    if (audio) audio.setEntityMood(true, false);
+    sc.step = 2;
+  } else if (at(2, 1.6)) {
+    if (audio) audio.entityListen();
+    sc.step = 3;
+  } else if (at(3, 2.7)) {
+    lights.flash(0.3);
+    sc.step = 4;
+  } else if (at(4, 2.95)) {
+    placeTitleEntity(4.5);
+    sc.step = 5;
+  } else if (at(5, 4.1)) {
+    lights.flash(0.18);
+    sc.step = 6;
+  } else if (at(6, 4.25)) {
+    // 덮친다: 메뉴가 사라지고 얼굴이 화면을 채운다
+    placeTitleEntity(1.3);
+    document.body.classList.add('scare');
+    e.jumpscarePose(camera);
+    if (audio) audio.jumpscare();
+    sc.step = 7;
+  } else if (at(7, 5.4)) {
+    sc.fade = 0;
+    e.hide();
+    if (audio) audio.setStatic(0.15, 0.1);
+    sc.step = 8;
+  } else if (at(8, 6.1)) {
+    endTitleScare(true);
+    return;
+  }
+
+  if (sc.step >= 2 && sc.step <= 6) {
+    // 뒷다리로 일어선 채 이쪽을 보고 서 있다
+    e.state = 'wander';
+    e.listenT = 9;
+    e.rise = 1;
+    e._animate(dt, game.time, false);
+    e.mesh.rotation.y = e.yaw;
+  }
+  if (sc.step === 7) {
+    game.glitch = t < 4.75 ? 0.3 : 1;
+    const toward = Math.hypot(camera.position.x - e.pos.x, camera.position.z - e.pos.z);
+    e.mesh.updateMatrixWorld(true);
+    e.head.getWorldPosition(_head);
+    const dx = _head.x - camera.position.x;
+    const dz = _head.z - camera.position.z;
+    if (Math.hypot(dx, dz) > 0.55 && toward > 0.3) {
+      e.pos.x += ((camera.position.x - e.pos.x) / toward) * dt * 3;
+      e.pos.z += ((camera.position.z - e.pos.z) / toward) * dt * 3;
+    }
+    e.syncMesh();
+    if (e.faceCamera) e.faceCamera(camera);
+    else e.head.lookAt(camera.position);
+    // 고개가 얼굴 쪽으로 끌려간다
+    const pitch = Math.atan2(_head.y - camera.position.y, Math.hypot(dx, dz));
+    sc.pitch += (pitch - sc.pitch) * Math.min(1, dt * 10);
+  }
+}
+
+function startTitleScare() {
+  game.scare = { t: 0, step: 0, yaw: game.time * 0.045 + 0.6, pitch: 0, fade: 0.62, hair: entity.hair ? entity.hair.rotation.clone() : null };
+}
+
+// 카메라 정면 d 미터 (벽에 가리거나 벽 속이면 더 가까이)
+function placeTitleEntity(d) {
+  const sc = game.scare;
+  const lv = game.level;
+  const e = entity;
+  const cp = camera.position;
+  const fx = -Math.sin(sc.yaw);
+  const fz = -Math.cos(sc.yaw);
+  let x = cp.x + fx * 1.3;
+  let z = cp.z + fz * 1.3;
+  for (let k = d; k >= 1.3; k -= 0.5) {
+    const px = cp.x + fx * k;
+    const pz = cp.z + fz * k;
+    if (lv.lineOfSight(cp.x, cp.z, px, pz) && !lv.hitsCollider(px, pz, 0.45)) {
+      x = px;
+      z = pz;
+      break;
+    }
+  }
+  e.pos.set(x, 0, z);
+  e.yaw = Math.atan2(cp.x - x, cp.z - z);
+  e.syncMesh();
+  e.mesh.rotation.y = e.yaw;
+  e.mesh.visible = true;
+}
+
+function endTitleScare(glitch) {
+  const sc = game.scare;
+  game.scare = null;
+  game.idleT = 0;
+  game.scared = true;
+  document.body.classList.remove('scare');
+  entity.hide();
+  entity.reset(game.level, game.level.theme);
+  if (sc && sc.hair && entity.hair) entity.hair.rotation.copy(sc.hair);
+  if (audio) {
+    audio.setStatic(0, 0.4);
+    audio.setEntityMood(false, false);
+  }
+  if (glitch) game.glitch = 0.8;
+}
+
+for (const type of ['pointermove', 'pointerdown', 'keydown', 'wheel']) {
+  addEventListener(type, () => (game.idleT = 0), { passive: true });
 }
 
 const _head = new THREE.Vector3();
@@ -720,6 +861,9 @@ if (TEST) {
     loadLevel,
     LEVELS,
     camera,
+    scareNow: () => {
+      game.idleT = 1e9;
+    },
   };
 }
 

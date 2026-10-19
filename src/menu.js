@@ -322,5 +322,8 @@ export function createMenu(opts) {
     get open() {
       return open;
     },
+    get current() {
+      return current;
+    },
   };
 }
