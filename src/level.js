@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG } from './rng.js';
-import { box, worldUV, makeItem, makeExit, makeLightExit, deskGeoms } from './props.js';
+import { box, worldUV, makeItem, makeExit, makeLightExit, makeBreaker, deskGeoms } from './props.js';
 
 export const OPEN = 0;
 export const WALL = 1;
@@ -701,6 +701,7 @@ export class Level {
     };
 
     if (t.furniture === 'classroom') this._buildClassroom();
+    if (t.furniture === 'station') this._buildStation();
     this._buildAO();
 
     add(wallG, wallMat);
@@ -841,7 +842,50 @@ export class Level {
       }
     }
 
+    if (t.id === 'station') {
+      // 천장 밑을 따라 달리는 배관 두 줄, 군데군데 바닥까지 내려오는 세로 배관
+      this.pipes = [];
+      this.boxes = [];
+      for (const f of faces) {
+        const [x, y, d] = f;
+        if (!r.chance(0.55)) continue;
+        const a = onWall(x, y, d, -S / 2 - 0.1, 0.16);
+        const b = onWall(x, y, d, S / 2 + 0.1, 0.16);
+        const y1 = WH - 0.35;
+        put('pipe', tube(new THREE.Vector3(a.x, y1, a.z), new THREE.Vector3(b.x, y1, b.z), 0.11));
+        if (r.chance(0.6)) {
+          const a2 = onWall(x, y, d, -S / 2 - 0.1, 0.1);
+          const b2 = onWall(x, y, d, S / 2 + 0.1, 0.1);
+          put('pipe2', tube(new THREE.Vector3(a2.x, y1 - 0.34, a2.z), new THREE.Vector3(b2.x, y1 - 0.34, b2.z), 0.055));
+        }
+        const m = onWall(x, y, d, 0, 0.16);
+        this.pipes.push({ x: m.x, y: y1, z: m.z });
+        if (r.chance(0.12)) {
+          const v = onWall(x, y, d, r.range(-1.4, 1.4), 0.16);
+          put('pipe', tube(new THREE.Vector3(v.x, 0, v.z), new THREE.Vector3(v.x, y1, v.z), 0.08));
+          // 밸브 손잡이
+          const wheel = new THREE.TorusGeometry(0.13, 0.02, 5, 12);
+          wheel.rotateY(v.ry).translate(v.x - DX[d] * 0.14, 1.25, v.z - DY[d] * 0.14);
+          put('valve', wheel);
+        }
+      }
+      // 분전반: 합선 불꽃과 지지직 소리가 여기서 난다
+      for (const f of faces.slice(0, Math.floor(faces.length * 0.12))) {
+        const p = onWall(...f, r.range(-1.1, 1.1), 0.09);
+        put('ebox', place(new THREE.BoxGeometry(0.42, 0.56, 0.16), p, 1.4));
+        const fp = { x: p.x - DX[f[2]] * 0.081, z: p.z - DY[f[2]] * 0.081, ry: p.ry };
+        put('eface', place(new THREE.PlaneGeometry(0.4, 0.52), fp, 1.4));
+        this.boxes.push({ x: p.x - DX[f[2]] * 0.2, y: 1.4, z: p.z - DY[f[2]] * 0.2 });
+      }
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (r.chance(0.12)) ventAt(x, y);
+    }
+
     const mats = {
+      pipe: () => new THREE.MeshLambertMaterial({ color: 0x5b5246 }),
+      pipe2: () => new THREE.MeshLambertMaterial({ color: 0x7a2e22 }),
+      valve: () => new THREE.MeshLambertMaterial({ color: 0xa8281c }),
+      ebox: () => new THREE.MeshLambertMaterial({ color: 0x5e625e }),
+      eface: () => new THREE.MeshLambertMaterial({ map: tex.elecBox }),
       white: () => new THREE.MeshLambertMaterial({ color: 0xe6e2d6 }),
       dark: () => new THREE.MeshBasicMaterial({ color: 0x15130f }),
       vent: () => new THREE.MeshLambertMaterial({ map: tex.vent }),
@@ -1294,6 +1338,79 @@ export class Level {
     add(lockers, new THREE.MeshLambertMaterial({ map: tex.locker }));
   }
 
+  // 설비실: 방마다 벽에 붙은 변압기. 기계 소리가 여기서 난다
+  _buildStation() {
+    const tex = this.tex;
+    const r = this.rng;
+    const S = this.S;
+    const W = this.W;
+    const body = [];
+    const tops = [];
+    this.transformers = [];
+    const banned = new Set([this.spawnCell.join(','), `${this.exitFace[0]},${this.exitFace[1]}`]);
+    for (const room of this.rooms) {
+      const opts = [];
+      for (let y = room.y0; y < room.y0 + room.h; y++) {
+        for (let x = room.x0; x < room.x0 + room.w; x++) {
+          if (banned.has(`${x},${y}`)) continue;
+          for (let d = 0; d < 4; d++) {
+            if (this.getEdge(x, y, d) === WALL && !this.reserved.has(`${x},${y},${d}`)) opts.push([x, y, d]);
+          }
+        }
+      }
+      if (!opts.length) continue;
+      r.shuffle(opts);
+      const n = room.w * room.h >= 6 ? 2 : 1;
+      for (const [x, y, d] of opts.slice(0, n)) {
+        if (this.transformers.some((o) => o.cx === x && o.cy === y)) continue;
+        this.reserved.add(`${x},${y},${d}`);
+        const c = this.center(x, y);
+        const depth = 0.9;
+        const len = 1.7;
+        const h = 2.0;
+        const k = S / 2 - T / 2 - depth / 2 - 0.04;
+        const px = c.x + DX[d] * k;
+        const pz = c.z + DY[d] * k;
+        const sx = d < 2 ? depth : len;
+        const sz = d < 2 ? len : depth;
+        body.push(worldUV(new THREE.BoxGeometry(sx, h, sz).translate(px, h / 2, pz), 0.6, 0.5, 0, 0));
+        // 위의 단자 세 개
+        for (const o of [-0.5, 0, 0.5]) {
+          const ox = d < 2 ? 0 : o;
+          const oz = d < 2 ? o : 0;
+          tops.push(new THREE.CylinderGeometry(0.07, 0.09, 0.32, 8).translate(px + ox, h + 0.16, pz + oz));
+        }
+        this._addCollider(px - sx / 2, pz - sz / 2, px + sx / 2, pz + sz / 2);
+        this.transformers.push({ x: px, z: pz, cx: x, cy: y });
+      }
+    }
+    const merge = (geos, mat) => {
+      if (!geos.length) return;
+      const m = new THREE.Mesh(mergeGeometries(geos), mat);
+      geos.forEach((g) => g.dispose());
+      this.group.add(m);
+    };
+    merge(body, new THREE.MeshLambertMaterial({ map: tex.transformer }));
+    merge(tops, new THREE.MeshLambertMaterial({ color: 0x7c6a52 }));
+
+    // 합선 불꽃용 광원 하나
+    this.spark = new THREE.PointLight(0xa8d4ff, 0, 7, 2);
+    this.sparkT = 0;
+    this.sparkSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: tex.glow,
+        color: 0xcfe6ff,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+      }),
+    );
+    this.sparkSprite.scale.setScalar(0.7);
+    this.sparkSprite.visible = false;
+    this.root.add(this.spark, this.sparkSprite);
+  }
+
   _freeSpot(cx, cy, rad) {
     const c = this.center(cx, cy);
     for (let i = 0; i < 16; i++) {
@@ -1362,10 +1479,34 @@ export class Level {
       return true;
     };
 
+    // 벽에 붙은 목표물 (차단기): 그 칸의 빈 벽면에 단다
+    const spawnWall = (type, cell) => {
+      const [x, y] = cell;
+      const ds = [0, 1, 2, 3].filter((d) => this.getEdge(x, y, d) === WALL && !this.reserved.has(`${x},${y},${d}`));
+      if (!ds.length) return false;
+      const d = r.pick(ds);
+      this.reserved.add(`${x},${y},${d}`);
+      const c = this.center(x, y);
+      const off = this.S / 2 - T / 2;
+      const mesh = makeBreaker(this.tex);
+      const px = c.x + DX[d] * off;
+      const pz = c.z + DY[d] * off;
+      mesh.position.set(px, 1.35, pz);
+      mesh.rotation.y = Math.atan2(-DX[d], -DY[d]);
+      mesh.userData.home = { x: px, z: pz };
+      this.dyn.add(mesh);
+      // 상호작용 지점은 함 바로 앞
+      const ix = c.x + DX[d] * (off - 0.2);
+      const iz = c.z + DY[d] * (off - 0.2);
+      this.items.push({ type, mesh, x: ix, z: iz, y: 1.35, cell, fixed: true, taken: false, phase: r.next() * 10 });
+      return true;
+    };
+
     let placed = 0;
     if (t.goal) {
       const goalCells = pick(t.goal.count + 2, Math.floor(this.maxDist * 0.35), Math.max(3, Math.floor(W / 4)));
-      for (const c of goalCells) if (placed < t.goal.count && spawnItem(t.goal.item, c)) placed++;
+      const put = t.goal.wall ? spawnWall : spawnItem;
+      for (const c of goalCells) if (placed < t.goal.count && put(t.goal.item, c)) placed++;
     }
     this.goalTotal = placed;
     for (const c of pick(t.pickups.battery, 2, 3)) spawnItem('battery', c);
@@ -1407,6 +1548,13 @@ export class Level {
   update(time) {
     const dt = Math.min(0.1, time - (this._lastT ?? time));
     this._lastT = time;
+    if (this.spark) {
+      // 합선 불꽃: 몇 번 번쩍이다 꺼진다
+      this.sparkT = Math.max(0, this.sparkT - dt);
+      const on = this.sparkT > 0 && Math.random() < 0.55;
+      this.spark.intensity = on ? 4 + Math.random() * 6 : 0;
+      this.sparkSprite.visible = on;
+    }
     if (this.waterMat) {
       this.waterMat.map.offset.set(time * 0.018, time * 0.011);
       this.waterMat.normalMap.offset.set(time * 0.03, -time * 0.021);
@@ -1426,6 +1574,14 @@ export class Level {
       }
     }
     for (const it of this.items) {
+      if (it.fixed) {
+        // 차단기: 손잡이가 끝까지 올라가는 동안 천천히 젖혀진다
+        const lv = it.mesh.userData.lever;
+        const want = it.taken ? Math.PI * 0.18 : Math.PI * 0.82;
+        lv.rotation.x += (want - lv.rotation.x) * Math.min(1, dt * 14);
+        if (!it.taken) it.mesh.userData.glow.material.opacity = 0.45 + Math.sin(time * 3 + it.phase) * 0.2;
+        continue;
+      }
       if (it.taken || it.type === 'note') continue;
       const bob = Math.sin(time * 2 + it.phase) * 0.05;
       it.mesh.position.y = it.y + bob;
@@ -1444,6 +1600,39 @@ export class Level {
       const pc = this.lightPool.geometry.attributes.color;
       for (let k = 0; k < 4; k++) pc.setW(i * 4 + k, b);
     }
+  }
+
+  // 켜진 등 아래 칸인가 (깜빡이는 등은 믿을 수 없다: 정상 등이 지금 켜져 있을 때만)
+  isLit(cx, cy) {
+    const f = this.fixtures[cy * this.W + cx];
+    return !!f && f.state === 1 && f.b > 0.3;
+  }
+
+  // 차단기를 올리면 주변 칸의 나간 등이 다시 들어온다. 가까운 것부터 차례로 켜지도록 지연 시간을 같이 준다
+  powerUp(cx, cy, rad) {
+    const out = [];
+    for (let y = cy - rad; y <= cy + rad; y++) {
+      for (let x = cx - rad; x <= cx + rad; x++) {
+        if (!this.inBounds(x, y)) continue;
+        const i = y * this.W + x;
+        const f = this.fixtures[i];
+        if (f.state === 1) continue;
+        out.push({ i, delay: 0.35 + Math.hypot(x - cx, y - cy) * 0.45 + Math.random() * 0.2 });
+      }
+    }
+    return out;
+  }
+
+  // 등 하나를 정상 등으로 바꾼다. 바닥의 빛 고임도 다시 살린다
+  restoreFixture(i) {
+    this.fixtures[i].state = 1;
+  }
+
+  sparkAt(x, y, z) {
+    if (!this.spark) return;
+    this.spark.position.set(x, y, z);
+    this.sparkSprite.position.set(x, y, z);
+    this.sparkT = 0.25 + Math.random() * 0.35;
   }
 
   dispose() {

@@ -5,6 +5,7 @@ import { Player } from './player.js';
 import { Hound } from './entities/hound.js';
 import { Doll } from './entities/doll.js';
 import { Nothing } from './entities/none.js';
+import { Smiler } from './entities/smiler.js';
 import { LightRig } from './lights.js';
 import { AudioEngine } from './audio.js';
 import { VHS } from './vhs.js';
@@ -30,7 +31,7 @@ const vhs = new VHS(renderer);
 const lights = new LightRig(scene);
 const player = new Player(camera);
 // 레벨마다 다른 엔티티. 테마의 entity.kind 로 고른다
-const entities = { hound: new Hound(tex), doll: new Doll(tex), none: new Nothing() };
+const entities = { hound: new Hound(tex), doll: new Doll(tex), smiler: new Smiler(tex), none: new Nothing() };
 for (const e of Object.values(entities)) scene.add(e.mesh);
 let entity = entities.hound;
 const hud = new HUD();
@@ -55,6 +56,7 @@ const game = {
   levelT: 0,
   menuGlitch: 0,
   target: null,
+  powerQ: [], // 차단기를 올린 뒤 차례로 켜질 등
 };
 
 // 설정: 감도·음량·밝기. 타이틀과 일시정지 화면의 슬라이더가 같은 값을 공유한다
@@ -78,6 +80,7 @@ const ITEM_LABEL = {
   token: '탈의실 토큰 줍기',
   battery: '건전지 줍기',
   water: '아몬드 워터 마시기',
+  breaker: '차단기 올리기',
   note: '쪽지 읽기',
 };
 const DXY = [
@@ -95,7 +98,7 @@ function loadLevel(index, seed) {
   }
   const theme = LEVELS[index];
   const level = new Level(theme, seed, tex);
-  Object.assign(game, { level, levelIndex: index, seed, have: 0 });
+  Object.assign(game, { level, levelIndex: index, seed, have: 0, powerQ: [], lurkHint: false });
   scene.add(level.root);
   scene.fog = new THREE.Fog(theme.fog.color, theme.fog.near, theme.fog.far);
   scene.background = new THREE.Color(theme.fog.color);
@@ -305,18 +308,27 @@ function interact() {
     return;
   }
   it.taken = true;
-  it.mesh.visible = false;
-  if (it.shadow) it.shadow.visible = false;
-  audio.pickup();
   game.glitch = Math.max(game.glitch, 0.15);
+  if (it.fixed) {
+    // 벽에 붙은 차단기: 손잡이를 올리면 주변 등이 차례로 살아난다. 소리가 커서 그것도 듣는다
+    it.mesh.userData.setOn(true);
+    audio.breaker();
+    for (const p of lv.powerUp(...it.cell, lv.theme.goal.power ?? 1)) game.powerQ.push({ i: p.i, at: game.time + p.delay });
+    entity.hear(it.x, it.z, 24, lv);
+  } else {
+    it.mesh.visible = false;
+    if (it.shadow) it.shadow.visible = false;
+    audio.pickup();
+  }
   if (it.type === lv.theme.goal.item) {
+    const g = lv.theme.goal;
     game.have++;
     if (game.have >= lv.goalTotal && !lv.exit.unlocked) {
       lv.exit.unlocked = true;
       lv.exit.obj.setUnlocked(true);
       audio.unlock();
       hud.message('어딘가에서 전원이 들어오는 소리가 났다.\n비상구로 가라.', 5);
-    } else hud.message(`${lv.theme.goal.name} 획득 (${game.have}/${lv.goalTotal})`);
+    } else hud.message(`${g.done || `${g.name} 획득`} (${game.have}/${lv.goalTotal})`);
     updateObjective();
   } else if (it.type === 'battery') {
     player.battery = Math.min(100, player.battery + 45);
@@ -406,15 +418,33 @@ function update(dt) {
         game.glitch = 0.9;
       } else if (e === 'listen') audio.entityListen();
       else if (e === 'step') audio.entityStep(entity.chasing);
+      else if (e === 'flee') {
+        audio.entityFlee();
+        game.glitch = Math.max(game.glitch, 0.4);
+      } else if (e === 'lurk') {
+        audio.entityLurk();
+        if (!game.lurkHint) {
+          game.lurkHint = true;
+          hud.message('그것이 불빛 가장자리에서 기다린다', 4);
+        }
+      }
       else if (e === 'caught' && s !== 'transition') caught();
     }
   }
   lv.update(game.time);
+  // 차단기를 올린 뒤 가까운 등부터 하나씩 들어온다
+  if (game.powerQ.length) {
+    game.powerQ = game.powerQ.filter((p) => {
+      if (p.at > game.time) return true;
+      lv.restoreFixture(p.i);
+      return false;
+    });
+  }
 
   // 정신력: 그것이 가까이 있거나 어둠 속에 있으면 깎인다
   const prox = entity.proximity();
   const dark = player.lit < 0.25 && !player.flashOn;
-  player.sanity -= dt * (prox * 0.045 + (dark ? 0.007 : 0));
+  player.sanity -= dt * (prox * 0.045 + (dark ? (lv.theme.darkDrain ?? 0.007) : 0));
   if (prox === 0 && !dark) player.sanity += dt * 0.004;
   player.sanity = Math.max(0, Math.min(1, player.sanity));
   if (player.sanity < 0.15 && s === 'playing') {

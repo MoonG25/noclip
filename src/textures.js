@@ -1209,6 +1209,282 @@ function paper() {
   return c;
 }
 
+// ---------- LEVEL 3 · 전기 설비실 ----------
+// 거푸집 자국이 남은 콘크리트: 2m 판 이음매, 폼타이 구멍, 위에서 흘러내린 물때
+function concrete(dark = false) {
+  const S = 512;
+  const [c, x] = canvas(S, S);
+  x.fillStyle = dark ? '#363736' : '#6b6d69';
+  x.fillRect(0, 0, S, S);
+  stains(x, S, S, 10, dark ? '20,20,18' : '60,56,48', 110, 0.16);
+  stains(x, S, S, 5, '110,96,70', 70, 0.08);
+  if (!dark) {
+    // 거푸집 판 이음매
+    x.strokeStyle = 'rgba(40,38,34,0.45)';
+    x.lineWidth = 2;
+    x.beginPath();
+    x.moveTo(0, S / 2);
+    x.lineTo(S, S / 2);
+    x.moveTo(S / 2, 0);
+    x.lineTo(S / 2, S);
+    x.stroke();
+    // 폼타이 구멍
+    for (const [px, py] of [
+      [S / 4, S / 4],
+      [(S * 3) / 4, S / 4],
+      [S / 4, (S * 3) / 4],
+      [(S * 3) / 4, (S * 3) / 4],
+    ]) {
+      const g = x.createRadialGradient(px, py, 1, px, py, 9);
+      g.addColorStop(0, 'rgba(15,14,12,0.9)');
+      g.addColorStop(1, 'rgba(15,14,12,0)');
+      x.fillStyle = g;
+      x.fillRect(px - 10, py - 10, 20, 20);
+    }
+    // 흘러내린 물때와 녹물
+    for (let i = 0; i < 16; i++) {
+      const sx = rng.next() * S;
+      const len = 80 + rng.next() * 300;
+      const w = 3 + rng.next() * 10;
+      const rust = rng.next() < 0.35;
+      const g = x.createLinearGradient(0, 0, 0, len);
+      g.addColorStop(0, rust ? 'rgba(110,60,25,0.35)' : 'rgba(30,28,24,0.3)');
+      g.addColorStop(1, 'rgba(30,28,24,0)');
+      x.fillStyle = g;
+      x.fillRect(sx, 0, w, len);
+    }
+  }
+  grain(x, S, S, dark ? 18 : 24);
+  return c;
+}
+
+// 줄무늬 철판 바닥: 비스듬한 돌기, 판 이음매와 리벳, 녹
+function plate() {
+  const S = 512;
+  const [c, x] = canvas(S, S);
+  x.fillStyle = '#4d4f4f';
+  x.fillRect(0, 0, S, S);
+  const step = 32;
+  for (let j = 0; j < S / step; j++) {
+    for (let i = 0; i < S / step; i++) {
+      const cx = i * step + step / 2;
+      const cy = j * step + step / 2;
+      x.save();
+      x.translate(cx, cy);
+      x.rotate((i + j) % 2 ? Math.PI / 4 : -Math.PI / 4);
+      x.fillStyle = 'rgba(150,152,150,0.55)';
+      x.fillRect(-11, -3, 22, 3);
+      x.fillStyle = 'rgba(15,15,15,0.55)';
+      x.fillRect(-11, 0, 22, 3);
+      x.restore();
+    }
+  }
+  // 판 이음매 + 리벳
+  x.fillStyle = 'rgba(10,10,10,0.7)';
+  x.fillRect(0, 0, S, 3);
+  x.fillRect(0, 0, 3, S);
+  for (let i = 0; i < 8; i++) {
+    for (const [rx, ry] of [
+      [8 + i * 64, 9],
+      [9, 8 + i * 64],
+    ]) {
+      x.fillStyle = 'rgba(170,170,165,0.6)';
+      x.beginPath();
+      x.arc(rx, ry, 3, 0, Math.PI * 2);
+      x.fill();
+    }
+  }
+  stains(x, S, S, 9, '96,52,22', 70, 0.22);
+  stains(x, S, S, 6, '10,10,10', 90, 0.25);
+  grain(x, S, S, 22);
+  return c;
+}
+
+// 벽에 붙은 분전반: 회색 철함, 노란 고압 경고판
+function elecBox() {
+  const [c, x] = canvas(128, 160);
+  x.fillStyle = '#6d726f';
+  x.fillRect(0, 0, 128, 160);
+  x.strokeStyle = '#3a3d3b';
+  x.lineWidth = 4;
+  x.strokeRect(6, 6, 116, 148);
+  x.fillStyle = '#e8c21e';
+  x.beginPath();
+  x.moveTo(64, 30);
+  x.lineTo(98, 88);
+  x.lineTo(30, 88);
+  x.closePath();
+  x.fill();
+  x.fillStyle = '#111';
+  x.beginPath();
+  x.moveTo(68, 44);
+  x.lineTo(56, 66);
+  x.lineTo(66, 66);
+  x.lineTo(58, 82);
+  x.lineTo(74, 60);
+  x.lineTo(64, 60);
+  x.closePath();
+  x.fill();
+  x.font = 'bold 17px sans-serif';
+  x.textAlign = 'center';
+  x.fillText('고압 위험', 64, 116);
+  x.fillStyle = '#2a2c2b';
+  x.fillRect(100, 70, 10, 26);
+  stains(x, 128, 160, 4, '90,50,20', 30, 0.3);
+  grain(x, 128, 160, 20);
+  return c;
+}
+
+// 변압기 옆면: 냉각 핀, 아래쪽 경고 줄무늬, 명판
+function transformer() {
+  const [c, x] = canvas(256, 256);
+  x.fillStyle = '#4f5650';
+  x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 256; i += 16) {
+    x.fillStyle = 'rgba(0,0,0,0.45)';
+    x.fillRect(i, 0, 5, 210);
+    x.fillStyle = 'rgba(200,210,200,0.12)';
+    x.fillRect(i + 5, 0, 2, 210);
+  }
+  for (let i = -40; i < 300; i += 28) {
+    x.fillStyle = '#d9b31a';
+    x.beginPath();
+    x.moveTo(i, 256);
+    x.lineTo(i + 14, 256);
+    x.lineTo(i + 44, 212);
+    x.lineTo(i + 30, 212);
+    x.closePath();
+    x.fill();
+  }
+  x.fillStyle = '#1a1a1a';
+  x.fillRect(0, 208, 256, 4);
+  x.fillStyle = '#c9c4b4';
+  x.fillRect(88, 70, 80, 44);
+  // 명판의 글자줄 (면마다 좌우가 뒤집혀 붙으므로 글자 대신 줄로)
+  x.fillStyle = 'rgba(30,30,30,0.7)';
+  for (const [w, yy] of [
+    [54, 80],
+    [40, 92],
+    [60, 104],
+  ]) {
+    x.fillRect(128 - w / 2, yy, w, 4);
+  }
+  stains(x, 256, 256, 6, '100,55,20', 50, 0.28);
+  grain(x, 256, 256, 18);
+  return c;
+}
+
+// 주 차단기함 문짝
+function breakerPanel() {
+  const [c, x] = canvas(128, 160);
+  x.fillStyle = '#8b8f86';
+  x.fillRect(0, 0, 128, 160);
+  x.strokeStyle = '#4b4e48';
+  x.lineWidth = 5;
+  x.strokeRect(4, 4, 120, 152);
+  x.fillStyle = '#d1281c';
+  x.fillRect(14, 14, 100, 20);
+  x.fillStyle = '#fff';
+  x.font = 'bold 14px sans-serif';
+  x.textAlign = 'center';
+  x.fillText('주 차단기', 64, 29);
+  x.fillStyle = '#222';
+  x.font = 'bold 13px sans-serif';
+  x.fillText('ON', 64, 54);
+  x.fillText('OFF', 64, 146);
+  x.fillStyle = '#2b2d2a';
+  x.fillRect(52, 60, 24, 74);
+  stains(x, 128, 160, 4, '90,50,20', 30, 0.3);
+  grain(x, 128, 160, 18);
+  return c;
+}
+
+// 스마일러의 얼굴: 검은 바탕 위에 빛나는 눈 둘과 귀까지 찢어진 웃음. 가산 혼합이라 검은색은 보이지 않는다
+function smileFace(open) {
+  const W = 512;
+  const H = 384;
+  const [c, x] = canvas(W, H);
+  x.fillStyle = '#000';
+  x.fillRect(0, 0, W, H);
+  const r = new RNG(303);
+  x.shadowColor = 'rgba(255,250,225,0.9)';
+  // 눈: 동공 없는 하얀 눈. 양쪽 크기가 조금 다르다
+  for (const s of [-1, 1]) {
+    const ex = W / 2 + s * 94;
+    const ey = 112 + (s > 0 ? 6 : 0);
+    const rx = (open ? 34 : 24) + (s > 0 ? 3 : 0);
+    const ry = (open ? 31 : 19) + (s > 0 ? 2 : 0);
+    x.shadowBlur = 30;
+    x.fillStyle = '#fbf6e2';
+    x.beginPath();
+    x.ellipse(ex, ey, rx, ry, s * -0.18, 0, Math.PI * 2);
+    x.fill();
+  }
+  // 웃음: 위아래 두 곡선 사이를 이빨로 채운다
+  const top = (u) => 214 - Math.sin(u * Math.PI) * (open ? 4 : 30) - (1 - Math.sin(u * Math.PI)) * 46;
+  const bot = (u) => 214 + Math.sin(u * Math.PI) * (open ? 120 : 52) - (1 - Math.sin(u * Math.PI)) * 46;
+  const x0 = 48;
+  const x1 = W - 48;
+  const N = open ? 22 : 26;
+  x.shadowBlur = 18;
+  for (let i = 0; i < N; i++) {
+    const ua = i / N;
+    const ub = (i + 1) / N;
+    const ax = x0 + (x1 - x0) * ua;
+    const bx = x0 + (x1 - x0) * ub;
+    const um = (ua + ub) / 2;
+    const t = top(um);
+    const b = bot(um);
+    const tone = 228 + Math.floor(r.next() * 27);
+    x.fillStyle = `rgb(${tone},${tone - 6},${tone - 26})`;
+    if (open) {
+      // 위아래 이빨이 길게 늘어진다
+      const len = (b - t) * (0.32 + r.next() * 0.12);
+      x.beginPath();
+      x.moveTo(ax, t);
+      x.lineTo(bx, t);
+      x.lineTo((ax + bx) / 2 + (r.next() - 0.5) * 4, t + len);
+      x.closePath();
+      x.fill();
+      x.beginPath();
+      x.moveTo(ax, b);
+      x.lineTo(bx, b);
+      x.lineTo((ax + bx) / 2 + (r.next() - 0.5) * 4, b - len * 0.9);
+      x.closePath();
+      x.fill();
+    } else {
+      // 다문 이빨: 크기도 높이도 제각각, 군데군데 빠져 있다
+      if (r.next() < 0.08) continue;
+      const m = (t + b) / 2 + (r.next() - 0.5) * 6;
+      const gap = 1 + r.next() * 3;
+      const lean = (r.next() - 0.5) * 5;
+      const tooth = (y0, y1) => {
+        x.beginPath();
+        x.moveTo(ax + gap, y0);
+        x.lineTo(bx - gap, y0);
+        x.lineTo(bx - gap + lean, y1);
+        x.lineTo(ax + gap + lean, y1);
+        x.closePath();
+        x.fill();
+      };
+      tooth(t + (r.next() - 0.5) * 6, m - 2 - r.next() * 5);
+      tooth(m + 1 + r.next() * 4, b + (r.next() - 0.5) * 6);
+    }
+  }
+  // 입꼬리가 귀 쪽으로 가늘게 찢어진다
+  x.shadowBlur = 10;
+  x.strokeStyle = 'rgba(240,235,215,0.8)';
+  x.lineWidth = 3;
+  for (const s of [-1, 1]) {
+    x.beginPath();
+    const cx = s < 0 ? x0 : x1;
+    x.moveTo(cx, top(0));
+    x.quadraticCurveTo(cx + s * 22, top(0) - 30, cx + s * 30, top(0) - 70);
+    x.stroke();
+  }
+  return c;
+}
+
 export function makeTextures(renderer) {
   const a = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   return {
@@ -1248,5 +1524,13 @@ export function makeTextures(renderer) {
     caustics: toTex(caustics(), a, { srgb: false }),
     waterNormal: toTex(waterNormal(), a, { srgb: false }),
     paper: toTex(paper(), a, { repeat: false }),
+    concrete: toTex(concrete(), a),
+    concreteDark: toTex(concrete(true), a),
+    plate: toTex(plate(), a),
+    elecBox: toTex(elecBox(), a, { repeat: false }),
+    transformer: toTex(transformer(), a),
+    breakerPanel: toTex(breakerPanel(), a, { repeat: false }),
+    smile: toTex(smileFace(false), a, { repeat: false }),
+    smileOpen: toTex(smileFace(true), a, { repeat: false }),
   };
 }

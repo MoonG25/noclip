@@ -4,13 +4,18 @@
 // - 벽 너머의 소리는 먹먹하게 (시야가 막히면 저역만 남긴다)
 // - 풀룸: 물가의 찰랑임, 여과기 펌프, 천장에서 떨어지는 물방울, 물을 헤치는 소리,
 //         텅 빈 수영장의 먼 소리들, 그리고 탈출로에서 흘러나오는 먹먹한 음악
+// - 설비실: 제자리에서 우는 변압기, 멀리서 일정하게 뛰는 기계 심장, 환기구의 저음,
+//         배관의 증기, 분전반의 합선, 쇠 망치질 같은 수격, 떨어지는 공구
 import * as THREE from 'three';
 
 const SPACES = {
   lobby: { decay: 1.3, tone: 3200, early: 0.02 },
   classrooms: { decay: 1.8, tone: 4200, early: 0.03 },
   pool: { decay: 4.4, tone: 9000, early: 0.07 },
+  // 콘크리트와 쇠: 꽤 길게 울리지만 고음은 금방 먹힌다
+  station: { decay: 2.8, tone: 2600, early: 0.05 },
 };
+const TR_VOICES = 3;
 
 const HUM_VOICES = 5;
 const LAP_VOICES = 3;
@@ -134,6 +139,59 @@ export class Soundscape {
       this.wade.connect(a.reverbSend);
     }
 
+    // 설비실: 변압기 웅웅거림. 100Hz 자기 왜곡음과 배음, 철심이 떠는 지글거림
+    this.trans = [];
+    for (let i = 0; i < TR_VOICES; i++) {
+      const mix = ctx.createGain();
+      const detune = 1 + (Math.random() - 0.5) * 0.004;
+      for (const [type, f, amp] of [
+        ['sine', 50, 0.45],
+        ['sawtooth', 100, 0.22],
+        ['sine', 200, 0.12],
+        ['sine', 300, 0.07],
+      ]) {
+        const o = a._osc(type, f * detune);
+        const g = ctx.createGain();
+        g.gain.value = amp;
+        o.connect(g).connect(mix);
+      }
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 650;
+      const fizz = ctx.createBiquadFilter();
+      fizz.type = 'bandpass';
+      fizz.frequency.value = 2200 + Math.random() * 600;
+      fizz.Q.value = 3;
+      const fg = ctx.createGain();
+      fg.gain.value = 0.05;
+      a._loop(a.white).connect(fizz).connect(fg);
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      const p = this._panner(1.4, 1.2);
+      mix.connect(lp).connect(g);
+      fg.connect(g);
+      g.connect(p);
+      this._route(p, 0.35);
+      this.trans.push({ g, p });
+    }
+    // 환기 덕트의 저음: 아주 느리게 부풀었다 가라앉는다 (정위 없이 사방에서)
+    {
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 130;
+      const am = ctx.createGain();
+      am.gain.value = 0.7;
+      const lfo = a._osc('sine', 0.07);
+      const lg = ctx.createGain();
+      lg.gain.value = 0.3;
+      lfo.connect(lg).connect(am.gain);
+      a._loop(a.brown).connect(lp).connect(am);
+      this.duct = ctx.createGain();
+      this.duct.gain.value = 0;
+      am.connect(this.duct).connect(a.master);
+    }
+    this.engine = { next: 0, beat: 0, pauseT: 0 };
+
     // 탈출로 음악
     {
       this.beaconIn = ctx.createGain();
@@ -228,6 +286,19 @@ export class Soundscape {
     this.pool = pool;
     for (const l of this.laps) l.g.gain.setTargetAtTime(pool ? 0.28 : 0, t, 0.6);
     this.pump.g.gain.setTargetAtTime(0, t, 0.3);
+    const station = !!level.theme.audio.station;
+    this.station = station;
+    for (const v of this.trans) v.g.gain.setTargetAtTime(0, t, 0.3);
+    this.duct.gain.setTargetAtTime(station ? 0.22 : 0, t, 1.2);
+    if (station) {
+      // 기계 심장은 가장 큰 방에서 뛴다
+      let best = null;
+      for (const r of level.rooms) if (!best || r.w * r.h > best.w * best.h) best = r;
+      const c = best ? { x: (best.x0 + best.w / 2) * level.S, z: (best.y0 + best.h / 2) * level.S } : level.center(0, 0);
+      this.engine = { x: c.x, z: c.z, next: t + 2, beat: 0, pauseT: 0, occ: true };
+      this.eventT = 4;
+      this.dripT = 3;
+    }
     this.humLevel = level.theme.audio.hum;
     const beacon = level.exit.kind === 'light';
     this.music.on = beacon;
@@ -248,6 +319,9 @@ export class Soundscape {
     for (const l of this.laps) l.g.gain.setTargetAtTime(0, t, 0.3);
     this.pump.g.gain.setTargetAtTime(0, t, 0.3);
     this.wade.gain.setTargetAtTime(0, t, 0.2);
+    for (const v of this.trans) v.g.gain.setTargetAtTime(0, t, 0.2);
+    this.duct.gain.setTargetAtTime(0, t, 0.3);
+    this.station = false;
   }
 
   // ---------- 매 프레임 ----------
@@ -299,6 +373,8 @@ export class Soundscape {
       this._scheduleMusic(t);
     }
 
+    if (this.station) this._updateStation(dt, t, cam, checkOcc);
+
     if (this.pool) {
       // 찰랑임: 가장 가까운 물가 세 곳으로 소리를 옮긴다
       this.emitT -= dt;
@@ -342,6 +418,220 @@ export class Soundscape {
         const z = cam.z + Math.sin(ang) * r;
         this._poolEvent(x, z, !lv.lineOfSight(cam.x, cam.z, x, z));
       }
+    }
+  }
+
+  _updateStation(dt, t, cam, checkOcc) {
+    const lv = this.level;
+    // 변압기: 가까운 세 대가 제자리에서 운다. 벽 너머면 먹먹하게 (저음 위주라 덜 줄인다)
+    this.emitT -= dt;
+    if (this.emitT <= 0) {
+      this.emitT = 0.4;
+      const list = (lv.transformers || [])
+        .map((o) => ({ o, d: Math.hypot(o.x - cam.x, o.z - cam.z) }))
+        .sort((p, q) => p.d - q.d)
+        .slice(0, TR_VOICES);
+      this.trans.forEach((v, i) => {
+        const n = list[i];
+        if (!n) return v.g.gain.setTargetAtTime(0, t, 0.3);
+        const o = n.o;
+        // 다른 변압기로 옮겨 갈 때는 소리를 죽였다가 옮긴다 (소리가 날아다니지 않게)
+        if (v.at !== o) {
+          v.g.gain.setTargetAtTime(0, t, 0.05);
+          this._place(v.p, o.x, 1.2, o.z, 0.01);
+          v.at = o;
+        }
+        const open = lv.lineOfSight(cam.x, cam.z, o.x, o.z);
+        v.g.gain.setTargetAtTime(n.d < 26 ? (open ? 0.2 : 0.09) : 0, t + 0.1, 0.5);
+      });
+    }
+
+    // 기계 심장: 쿵 — 쿵 … 치이익. 가끔 한동안 멈췄다가 덜컹거리며 다시 돈다
+    const e = this.engine;
+    if (checkOcc) e.occ = !lv.lineOfSight(cam.x, cam.z, e.x, e.z);
+    // 큰 기계라 멀리서도 들려야 하지만, 바로 옆에서 귀가 터지면 안 된다
+    e.k = Math.min(9, Math.max(1, Math.hypot(e.x - cam.x, e.z - cam.z) * 0.32));
+    if (e.pauseT > 0) {
+      e.pauseT -= dt;
+      if (e.pauseT <= 0) {
+        this._engineRestart(e.x, e.z, e.occ, e.k);
+        e.next = t + 1.6;
+        e.beat = 0;
+      }
+    } else if (e.next < t + 0.1) {
+      const at = Math.max(e.next, t);
+      const step = e.beat % 4;
+      if (step === 0) this._thump(e.x, e.z, e.occ, at, 1, e.k);
+      else if (step === 1) this._thump(e.x, e.z, e.occ, at, 0.6, e.k);
+      else if (step === 3) this._steam(e.x, 2.4, e.z, e.occ, at, 0.9, Math.min(0.6, 0.07 * e.k));
+      e.next = at + 0.85;
+      e.beat++;
+      if (step === 3 && Math.random() < 0.06) e.pauseT = 8 + Math.random() * 14;
+    }
+
+    // 물방울 (가끔, 쇠 위로)
+    this.dripT -= dt;
+    if (this.dripT <= 0) {
+      this.dripT = 2 + Math.random() * 5;
+      const ang = Math.random() * Math.PI * 2;
+      const r = 2 + Math.random() * 8;
+      const x = cam.x + Math.cos(ang) * r;
+      const z = cam.z + Math.sin(ang) * r;
+      this._drip(x, 0.02, z, false, checkOcc && !lv.lineOfSight(cam.x, cam.z, x, z));
+    }
+
+    // 설비실의 소리들
+    this.eventT -= dt;
+    if (this.eventT <= 0) {
+      this.eventT = 4 + Math.random() * 9;
+      this._stationEvent(cam);
+    }
+  }
+
+  // 정위된 소리를 낼 지점: 목록 중 플레이어 주변 반경 안에서 무작위로
+  _pickNear(list, cam, minR, maxR) {
+    const opts = (list || []).filter((p) => {
+      const d = Math.hypot(p.x - cam.x, p.z - cam.z);
+      return d >= minR && d <= maxR;
+    });
+    return opts.length ? opts[Math.floor(Math.random() * opts.length)] : null;
+  }
+
+  _thump(x, z, occluded, t, k, boost) {
+    const a = this.a;
+    const out = this._spot(x, 0.8, z, { occluded, send: 1.1, life: 4 });
+    const g = this.ctx.createGain();
+    g.gain.value = boost;
+    g.connect(out);
+    a._tone(g, t, { f0: 62, f1: 32, gain: 0.5 * k, attack: 0.005, decay: 0.35 });
+    a._noiseHit(g, t, { freq: 260, gain: 0.35 * k, decay: 0.18 });
+    // 쇠가 맞물리는 소리
+    for (const m of [1, 2.3, 3.9]) a._tone(g, t + 0.06, { type: 'triangle', f0: 170 * m, gain: (0.05 * k) / m, decay: 0.4 });
+  }
+
+  _steam(x, y, z, occluded, t, len, gain) {
+    const a = this.a;
+    const ctx = this.ctx;
+    const out = this._spot(x, y, z, { occluded, send: 0.8, life: len + 3 });
+    const s = ctx.createBufferSource();
+    s.buffer = a.white;
+    s.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(1800, t);
+    hp.frequency.linearRampToValueAtTime(3600, t + len);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.08);
+    g.gain.setValueAtTime(gain * 0.8, t + len * 0.6);
+    g.gain.linearRampToValueAtTime(0, t + len);
+    s.connect(hp).connect(g).connect(out);
+    s.start(t, Math.random());
+    s.stop(t + len + 0.05);
+  }
+
+  _engineRestart(x, z, occluded, boost) {
+    const a = this.a;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const out = this._spot(x, 1, z, { occluded, send: 1.2, life: 5 });
+    const g = ctx.createGain();
+    g.gain.value = boost;
+    g.connect(out);
+    // 덜컹, 덜컹, 덜커덩 — 그리고 모터가 올라온다
+    for (let i = 0; i < 3; i++) a._noiseHit(g, t + i * 0.45 - i * i * 0.08, { freq: 300, gain: 0.3, decay: 0.15 });
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(18, t);
+    o.frequency.exponentialRampToValueAtTime(48, t + 1.4);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 300;
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0, t);
+    og.gain.linearRampToValueAtTime(0.12, t + 0.8);
+    og.gain.linearRampToValueAtTime(0, t + 1.6);
+    o.connect(lp).connect(og).connect(g);
+    o.start(t);
+    o.stop(t + 1.7);
+  }
+
+  _stationEvent(cam) {
+    const a = this.a;
+    const lv = this.level;
+    const t = this.ctx.currentTime;
+    const occ = (p) => !lv.lineOfSight(cam.x, cam.z, p.x, p.z);
+    const kind = Math.floor(Math.random() * 5);
+    if (kind === 0) {
+      // 배관에서 새는 증기
+      const p = this._pickNear(lv.pipes, cam, 2, 14);
+      if (p) this._steam(p.x, p.y, p.z, occ(p), t, 1.2 + Math.random() * 2.2, 0.16);
+    } else if (kind === 1) {
+      // 분전반 합선: 지지직 튀는 불꽃과 짧게 우는 60Hz
+      const p = this._pickNear(lv.boxes, cam, 2, 16);
+      if (!p) return;
+      const o = occ(p);
+      const out = this._spot(p.x, p.y, p.z, { occluded: o, send: 0.5, life: 3 });
+      let tt = t;
+      const n = 6 + Math.floor(Math.random() * 10);
+      for (let i = 0; i < n; i++) {
+        a._noiseHit(out, tt, { freq: 3000 + Math.random() * 3000, type: 'highpass', gain: 0.25 + Math.random() * 0.3, decay: 0.006 + Math.random() * 0.02 });
+        tt += 0.01 + Math.random() * 0.07;
+      }
+      a._tone(out, t, { type: 'sawtooth', f0: 120, f1: 110, gain: 0.08, attack: 0.01, decay: tt - t });
+      if (!o) lv.sparkAt(p.x, p.y, p.z);
+    } else if (kind === 2) {
+      // 수격: 배관 속에서 쇠망치로 치는 듯한 소리가 몇 번 지나간다
+      const p = this._pickNear(lv.pipes, cam, 6, 26);
+      if (!p) return;
+      const out = this._spot(p.x, p.y, p.z, { occluded: occ(p), send: 1.2, life: 5 });
+      const n = 2 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < n; i++) {
+        const tt = t + i * (0.25 + Math.random() * 0.4);
+        for (const [m, g] of [
+          [1, 0.2],
+          [2.42, 0.1],
+          [4.1, 0.05],
+        ]) {
+          a._tone(out, tt, { type: 'triangle', f0: 190 * m, gain: g, decay: 0.7 });
+        }
+        a._noiseHit(out, tt, { freq: 900, gain: 0.2, decay: 0.05 });
+      }
+    } else if (kind === 3) {
+      // 어딘가에 공구가 떨어져 튄다
+      const ang = Math.random() * Math.PI * 2;
+      const r = 10 + Math.random() * 18;
+      const p = { x: cam.x + Math.cos(ang) * r, z: cam.z + Math.sin(ang) * r };
+      const out = this._spot(p.x, 0.1, p.z, { occluded: occ(p), send: 1.3, life: 5 });
+      let gap = 0.28;
+      let tt = t;
+      for (let i = 0; i < 6; i++) {
+        for (const m of [1, 2.76, 5.4]) a._tone(out, tt, { f0: 980 * m, gain: (0.09 * (1 - i * 0.14)) / m, decay: 0.35 });
+        tt += gap;
+        gap *= 0.7;
+      }
+    } else {
+      // 멀리서 쇠문이 길게 끌린다
+      const ang = Math.random() * Math.PI * 2;
+      const r = 14 + Math.random() * 20;
+      const p = { x: cam.x + Math.cos(ang) * r, z: cam.z + Math.sin(ang) * r };
+      const out = this._spot(p.x, 1, p.z, { occluded: occ(p), send: 1.4, life: 6 });
+      const o = this.ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(240, t);
+      o.frequency.linearRampToValueAtTime(170, t + 1.8);
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 900;
+      bp.Q.value = 7;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.18, t + 0.3);
+      g.gain.linearRampToValueAtTime(0, t + 1.9);
+      o.connect(bp).connect(g).connect(out);
+      o.start(t);
+      o.stop(t + 2);
+      a._noiseHit(out, t + 2.0, { freq: 300, gain: 0.5, decay: 0.3 });
     }
   }
 

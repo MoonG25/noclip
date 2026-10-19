@@ -229,6 +229,32 @@ export class AudioEngine {
       this.houndBreath = ctx.createGain();
       this.houndBreath.gain.value = 0;
       mod.connect(this.houndBreath).connect(this.entityBus);
+
+      // 스마일러: 꽉 다문 이 사이로 새는 느린 숨 + 귀가 울리는 듯한 가는 고음
+      const sm = ctx.createGain();
+      sm.gain.value = 0.5;
+      this.smilerLfo = this._osc('sine', 0.32);
+      const sl = ctx.createGain();
+      sl.gain.value = 0.5;
+      this.smilerLfo.connect(sl).connect(sm.gain);
+      const teeth = ctx.createBiquadFilter();
+      teeth.type = 'bandpass';
+      teeth.frequency.value = 2300;
+      teeth.Q.value = 2.5;
+      this._loop(this.white).connect(teeth).connect(sm);
+      const ring = this._osc('sine', 3150);
+      const vib = this._osc('sine', 5.5);
+      const vg = ctx.createGain();
+      vg.gain.value = 14;
+      vib.connect(vg).connect(ring.frequency);
+      const rg = ctx.createGain();
+      rg.gain.value = 0.05;
+      ring.connect(rg);
+      this.smilerVoice = ctx.createGain();
+      this.smilerVoice.gain.value = 0;
+      sm.connect(this.smilerVoice);
+      rg.connect(this.smilerVoice);
+      this.smilerVoice.connect(this.entityBus);
     }
     obj.add(this.entityAudio);
   }
@@ -242,6 +268,7 @@ export class AudioEngine {
     this.musicBox.gain.cancelScheduledValues(t);
     this.musicBox.gain.setValueAtTime(0, t);
     this.houndBreath.gain.setValueAtTime(0, t);
+    this.smilerVoice.gain.setValueAtTime(0, t);
   }
 
   // 인형: 배회·수색 중에는 오르골이 흐르고, 추격이 시작되면 뚝 끊긴다
@@ -255,12 +282,52 @@ export class AudioEngine {
     const hound = this.kind === 'hound' && active;
     this.houndBreath.gain.setTargetAtTime(hound ? (chasing ? 0.9 : 0.45) : 0, t, 0.3);
     this.houndLfo.frequency.setTargetAtTime(chasing ? 2.4 : 0.6, t, 0.4);
+    const smiler = this.kind === 'smiler' && active;
+    this.smilerVoice.gain.setTargetAtTime(smiler ? (chasing ? 0.75 : 0.35) : 0, t, 0.4);
+    this.smilerLfo.frequency.setTargetAtTime(chasing ? 1.4 : 0.32, t, 0.5);
   }
 
   // 추격 시작 신호: 인형은 킥킥거리고, 하운드는 비명을 지른다
   entityAlert() {
     if (this.kind === 'hound') this._houndScreech();
+    else if (this.kind === 'smiler') this._smilerLaugh(1);
     else this.giggle(1);
+  }
+
+  // 스마일러가 불빛 가장자리에서 노려볼 때: 숨죽인 웃음
+  entityLurk() {
+    if (this.entityBus) this._smilerLaugh(0.45);
+  }
+
+  // 등이 들어와 달아날 때: 이 사이로 길게 내뿜는 쉿 소리
+  entityFlee() {
+    if (!this.entityBus) return;
+    const t = this.ctx.currentTime;
+    this._noiseHit(this.entityBus, t, { freq: 3200, type: 'highpass', gain: 0.7, decay: 0.9 });
+    this._noiseHit(this.entityBus, t, { freq: 1400, type: 'bandpass', q: 2, gain: 0.35, decay: 0.6 });
+    this._tone(this.entityBus, t, { type: 'sawtooth', f0: 2400, f1: 700, gain: 0.05, attack: 0.02, decay: 0.8 });
+  }
+
+  // 목으로 웃지 않고 숨으로 웃는다: 헉, 헉, 헉 하는 날숨 + 이 부딪치는 소리
+  _smilerLaugh(loud) {
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    const out = ctx.createGain();
+    out.gain.value = loud;
+    out.connect(this.entityBus);
+    const n = 5 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) {
+      const t = t0 + i * (0.12 + Math.random() * 0.03);
+      const k = 1 - i / (n + 2);
+      this._noiseHit(out, t, { freq: 1100 + Math.random() * 300, type: 'bandpass', q: 3, gain: 0.5 * k, decay: 0.08 });
+      this._noiseHit(out, t, { freq: 2700, type: 'bandpass', q: 5, gain: 0.25 * k, decay: 0.05 });
+      // 아주 낮게 섞이는 목소리
+      this._tone(out, t, { type: 'sawtooth', f0: 150 - i * 4, f1: 120, gain: 0.03 * k, attack: 0.01, decay: 0.08 });
+    }
+    const tc = t0 + n * 0.13 + 0.1;
+    for (let i = 0; i < 12; i++) {
+      this._noiseHit(out, tc + i * (0.025 + Math.random() * 0.02), { freq: 4200 + Math.random() * 800, type: 'bandpass', q: 9, gain: 0.3, decay: 0.008 });
+    }
   }
 
   // 하운드가 귀를 기울일 때 내는 딸깍거리는 소리
@@ -438,6 +505,18 @@ export class AudioEngine {
       this._noiseHit(out, t, { freq: 700 + Math.random() * 300, type: 'bandpass', q: 0.7, gain: v * 1.3, decay: 0.22 + loud * 0.15 });
       this._noiseHit(out, t + 0.05, { freq: 2600, type: 'bandpass', q: 1.2, gain: v * 0.5, decay: 0.12 });
       this._tone(out, t + 0.03, { f0: 380 + Math.random() * 200, f1: 900, gain: v * 0.25, decay: 0.06 });
+    } else if (surface === 'metal') {
+      // 철판: 둔탁하게 쿵 하고, 판이 잠깐 떨며 운다. 뛰면 설비실 전체가 울린다
+      const f = 210 + Math.random() * 40;
+      this._tone(out, t, { f0: 95 + Math.random() * 15, f1: 50, gain: v * 0.7, decay: 0.1 });
+      this._noiseHit(out, t, { freq: 1500 + Math.random() * 300, type: 'bandpass', q: 1.4, gain: v * 0.8, decay: 0.05 });
+      for (const [m, a] of [
+        [1, 0.16],
+        [2.37, 0.09],
+        [4.11, 0.05],
+      ]) {
+        this._tone(out, t, { type: 'triangle', f0: f * m, gain: v * a * (0.6 + loud), decay: 0.12 + loud * 0.25 });
+      }
     } else if (surface === 'tile') {
       // 젖은 타일: 딱딱하고 짧다. 울림은 리버브가 만든다
       this._noiseHit(out, t, { freq: 2600 + Math.random() * 500, type: 'bandpass', q: 2, gain: v * 0.9, decay: 0.04 });
@@ -451,6 +530,14 @@ export class AudioEngine {
   entityStep(chasing) {
     if (!this.entityBus) return;
     const t = this.ctx.currentTime;
+    if (this.kind === 'smiler') {
+      // 발소리는 없다. 다가올수록 이가 딱딱 부딪치는 소리만
+      const n = chasing ? 3 : 2;
+      for (let i = 0; i < n; i++) {
+        this._noiseHit(this.entityBus, t + i * 0.035, { freq: 4300 + Math.random() * 900, type: 'bandpass', q: 9, gain: chasing ? 0.4 : 0.22, decay: 0.008 });
+      }
+      return;
+    }
     if (this.kind === 'hound') {
       // 맨살이 바닥을 짚는 둔탁한 소리와 손톱 긁는 소리
       const v = chasing ? 0.9 : 0.4;
@@ -546,6 +633,38 @@ export class AudioEngine {
     this._tone(this.master, t, { type: 'sawtooth', f0: 55, f1: 110, gain: 0.25, attack: 0.3, decay: 1.2 });
     this._tone(this.master, t + 0.3, { f0: 880, gain: 0.08, decay: 0.4 });
     this._tone(this.master, t + 0.5, { f0: 1175, gain: 0.08, decay: 0.6 });
+  }
+
+  // 주 차단기: 철컥 → 계전기가 차례로 붙고 → 변압기가 웅 하고 깨어난다
+  breaker() {
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const out = this.sfx;
+    this._noiseHit(out, t, { freq: 420, gain: 0.8, decay: 0.12 });
+    this._tone(out, t, { f0: 110, f1: 45, gain: 0.5, decay: 0.18 });
+    this._noiseHit(out, t + 0.01, { freq: 3200, type: 'bandpass', q: 3, gain: 0.45, decay: 0.03 });
+    for (const m of [1, 2.71]) this._tone(out, t, { type: 'triangle', f0: 640 * m, gain: 0.06 / m, decay: 0.5 });
+    for (let i = 0; i < 4; i++) {
+      const tt = t + 0.25 + i * (0.12 + Math.random() * 0.1);
+      this._noiseHit(out, tt, { freq: 2600, type: 'bandpass', q: 4, gain: 0.25, decay: 0.015 });
+      this._tone(out, tt, { type: 'square', f0: 900, gain: 0.02, decay: 0.02 });
+    }
+    // 전원이 올라오는 소리
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(30, t + 0.3);
+    o.frequency.exponentialRampToValueAtTime(100, t + 1.8);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(200, t + 0.3);
+    lp.frequency.linearRampToValueAtTime(900, t + 1.8);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t + 0.3);
+    g.gain.linearRampToValueAtTime(0.16, t + 1.5);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
+    o.connect(lp).connect(g).connect(out);
+    o.start(t + 0.3);
+    o.stop(t + 3.3);
   }
 
   // ---------- 메뉴 ----------

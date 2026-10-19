@@ -254,3 +254,40 @@ export function makeLightExit(tex) {
     setUnlocked() {},
   };
 }
+
+// 설비실 주 차단기: 벽에 붙은 철함과 손잡이. 로컬 +z 방향(벽 밖)을 바라본다. 원점은 함 중앙
+export function makeBreaker(tex) {
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.6, 0.14), new THREE.MeshLambertMaterial({ color: 0x6f736b }));
+  box.position.z = 0.07;
+  g.add(box);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.56), new THREE.MeshLambertMaterial({ map: tex.breakerPanel }));
+  face.position.z = 0.141;
+  g.add(face);
+  // 손잡이: 아래(OFF)에서 위(ON)로 젖힌다
+  const pivot = new THREE.Group();
+  pivot.position.set(0, -0.02, 0.15);
+  const handleMat = new THREE.MeshLambertMaterial({ color: 0x1c1c1c });
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.04), handleMat);
+  arm.position.y = 0.1;
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.06), new THREE.MeshLambertMaterial({ color: 0xb52a1c }));
+  grip.position.set(0, 0.2, 0.01);
+  pivot.add(arm, grip);
+  pivot.rotation.x = Math.PI * 0.82; // 아래로 내려가 있다
+  g.add(pivot);
+  const lampMat = new THREE.MeshBasicMaterial({ color: 0xff2a1a });
+  const lamp = new THREE.Mesh(new THREE.CircleGeometry(0.022, 10), lampMat);
+  lamp.position.set(0.16, 0.24, 0.143);
+  g.add(lamp);
+  const glow = glowSprite(tex, 0xff3a20, 0.55, 0.6);
+  glow.position.set(0.16, 0.24, 0.2);
+  g.add(glow);
+  g.userData.glow = glow;
+  g.userData.lever = pivot;
+  g.userData.setOn = (on) => {
+    const c = on ? 0x3aff6a : 0xff2a1a;
+    lampMat.color.setHex(c);
+    glow.material.color.setHex(c);
+  };
+  return g;
+}
