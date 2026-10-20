@@ -4,7 +4,7 @@
 
 > 게임 소개는 [README.md](README.md)에 있다. 이 문서는 ai-slop 연구소의 실험 기록(개발 노트)이다.
 
-- **플레이**: https://noclip-swart.vercel.app
+- **플레이**: https://noclip1996.vercel.app
 - **시작일**: 2026-10-15
 - **상태**: ✅ 플레이 가능 (v0.7 · LEVEL 3 전기 설비실과 스마일러)
 - **레퍼런스**: [The Classrooms](https://store.steampowered.com/app/2099110/The_Classrooms/) (Steam, 절차 생성 · 파운드 푸티지 · 리미널 스페이스 호러)

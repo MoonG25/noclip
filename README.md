@@ -4,7 +4,7 @@
 
 ![기둥이 늘어선 노란 방](screenshots/lobby-01-rooms.jpg)
 
-### [▶ 브라우저에서 바로 플레이](https://noclip-swart.vercel.app)
+### [▶ 브라우저에서 바로 플레이](https://noclip1996.vercel.app)
 
 설치 없이 바로 실행됩니다 · 데스크톱 브라우저 · 마우스와 키보드 · 헤드폰 권장
 
