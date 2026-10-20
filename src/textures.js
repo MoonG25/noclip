@@ -1182,6 +1182,18 @@ function glow() {
   return c;
 }
 
+// 가장자리만 부드럽게 사라지는 원 (스마일러 얼굴 뒤의 어둠)
+function shade() {
+  const [c, x] = canvas(128, 128);
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.62, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 128, 128);
+  return c;
+}
+
 function paper() {
   const [c, x] = canvas(128, 160);
   x.fillStyle = '#e8e2cc';
@@ -1512,6 +1524,7 @@ export function makeTextures(renderer) {
     water: toTex(water(), a),
     ripple: toTex(ripple(), a, { repeat: false }),
     glow: toTex(glow(), a, { repeat: false }),
+    shade: toTex(shade(), a, { repeat: false, srgb: false }),
     doorLight: toTex(doorLight(), a, { repeat: false }),
     ao: toTex(aoGradient(), a, { repeat: false, srgb: false }),
     vent: toTex(vent(), a, { repeat: false }),

@@ -76,8 +76,14 @@ export class Smiler extends EntityBase {
     // 색을 1보다 크게 줘서 어둠 속에서 하얗게 타오르게 한다. 웃음은 머리보다 넓다
     this.faceMat.color.setRGB(1.7, 1.65, 1.5);
     this.face = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.675), this.faceMat);
-    this.face.position.set(0, -0.04, 0.21);
-    head.add(this.face);
+    this.face.position.set(0, -0.04, 0.26);
+    this.face.renderOrder = 10;
+    // 얼굴 뒤의 어둠: 머리보다 넓은 웃음이 검은 바탕 위에 떠 있게 한다 (작은 머리가 웃음 사이로 비치지 않게)
+    this.voidMat = new THREE.MeshBasicMaterial({ color: 0x020203, alphaMap: tex.shade, transparent: true, depthWrite: false });
+    this.void = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.8), this.voidMat);
+    this.void.position.set(0, -0.04, 0.245);
+    this.void.renderOrder = 9;
+    head.add(this.void, this.face);
     this.halo = new THREE.Sprite(
       new THREE.SpriteMaterial({
         map: tex.glow,
@@ -111,6 +117,8 @@ export class Smiler extends EntityBase {
     this.tiltT = 2;
     this.face.scale.setScalar(1);
     this.faceMat.map = this.tex.smile;
+    this.faceMat.depthTest = true;
+    this.voidMat.depthTest = true;
   }
 
   syncMesh() {
@@ -261,6 +269,10 @@ export class Smiler extends EntityBase {
   jumpscarePose() {
     this.faceMat.map = this.tex.smileOpen;
     this.faceMat.opacity = 1;
+    this.voidMat.opacity = 1;
+    // 코앞까지 덮친 순간에는 굽은 몸통·목이 웃음을 가리지 않게 얼굴을 맨 위에 그린다
+    this.faceMat.depthTest = false;
+    this.voidMat.depthTest = false;
     this.face.scale.setScalar(1.35);
     this.halo.material.opacity = 0.3;
     this.torso.rotation.x = 0.35;
@@ -315,5 +327,6 @@ export class Smiler extends EntityBase {
     }
     this.fadeK += (want - this.fadeK) * Math.min(1, dt * 6);
     this.faceMat.opacity = this.fadeK * (0.92 + Math.random() * 0.08);
+    this.voidMat.opacity = this.fadeK;
   }
 }
